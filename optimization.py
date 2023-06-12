@@ -3,7 +3,7 @@ import time
 
 import numpy as np
 
-from filters import MeshIndependencyFilter, OrientationRegularizationFilter, GaussianFilter
+from filters import MeshIndependenceFilter, OrientationRegularizationFilter, GaussianFilter
 from mma import MMA
 
 # https://github.com/pep-pig/Topology-optimization-of-structure-via-simp-method
@@ -21,7 +21,9 @@ TopOpt(inputfile, Ex, nu, volfrac, rmin, penal, theta0):
     rmin: radius of the filter (adjusts minimum feature size)
     theta0: initial orientation of the fibers, in degrees
 
-Configure environments: load_paths(ANSYS_path, res_dir, mod_dir)
+Configure Ansys:
+    load_paths(ANSYS_path, res_dir, mod_dir)
+    set_processors(np)
 Optimization function: optim()
 """
 class TopOpt():
@@ -34,13 +36,18 @@ class TopOpt():
         TopOpt.ANSYS_path = ANSYS_path
         TopOpt.res_dir = res_dir
         TopOpt.mod_dir = mod_dir
+
+    # Running on Shared Memory Parallel
+    np = 2
+    def set_processors(np):
+        TopOpt.np = np
     
     def __init__(self, inputfile, Ex, Ey, Gxy, nu, volfrac, rmin, theta0):
         self.meshdata_cmd = [TopOpt.ANSYS_path, '-b', '-i', 'ansys_meshdata.txt', '-o', TopOpt.res_dir+'meshdata.out']
-        self.result_cmd = [TopOpt.ANSYS_path, '-b', '-i', 'ansys_solve.txt', '-o', TopOpt.res_dir+'solve.out', '-smp', '-np 4']
+        self.result_cmd = [TopOpt.ANSYS_path, '-b', '-i', 'ansys_solve.txt', '-o', TopOpt.res_dir+'solve.out', '-smp', '-np', str(TopOpt.np)]
         
         TopOpt.write_pathfile(inputfile)
-        subprocess.call(self.meshdata_cmd)
+        subprocess.run(self.meshdata_cmd)
         
         self.num_elem, self.num_node = TopOpt.count_mesh()
         self.centers, self.elemvol, self.elmnodes, self.node_coord = TopOpt.get_mesh_data()
@@ -56,7 +63,7 @@ class TopOpt():
         self.penal   = 3
         self.move    = np.concatenate((0.4*np.ones(self.num_elem),0.01*np.ones(self.num_elem)))
         
-        self.sensitivity_filter = MeshIndependencyFilter(self.rmin, self.num_elem, self.centers)
+        self.sensitivity_filter = MeshIndependenceFilter(self.rmin, self.num_elem, self.centers)
         self.orientation_filter = OrientationRegularizationFilter(self.rmin, self.num_elem, self.centers)
 
         self.max_iter = 200
@@ -106,7 +113,7 @@ class TopOpt():
         np.savetxt(TopOpt.res_dir+'material.txt', material, fmt=' %-.7E', newline='\n')
         
         # Solve
-        subprocess.call(self.result_cmd)
+        subprocess.run(self.result_cmd)
         energy = np.loadtxt(TopOpt.res_dir+'strain_energy.txt', dtype=float) # strain_energy
         c = 2*np.sum(energy)
 
@@ -204,7 +211,7 @@ class TopOpt():
             rho, theta = np.split(xnew,2)
             theta = self.orientation_filter.filter(theta)
             self.x = np.concatenate((rho,theta))
-        
+            
         # Post-processing last iteration
 #         rho, theta = np.split(self.x,2)
 #         theta = GaussianFilter(self.num_elem, self.centers).filter(theta)

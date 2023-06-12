@@ -47,7 +47,7 @@ class ConvolutionFilter():
             print('\n***   Insufficient memory or small limitElementNumber    ***\n')
         return H
     
-class MeshIndependencyFilter(ConvolutionFilter):
+class MeshIndependenceFilter(ConvolutionFilter):
     def __init__(self, rmin, num_elem, centers):
         super().__init__(rmin,num_elem,centers)
         

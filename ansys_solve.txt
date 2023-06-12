@@ -39,6 +39,7 @@ ANTYPE,0
 SOLVE
 
 /POST1
+SET,LAST
 ETABLE,strain_e,SENE,
 *VGET,strain_e,ELEM,1,ETAB,STRAIN_E, , ,2
 *CFOPEN,strain_energy,txt
