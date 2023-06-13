@@ -71,7 +71,7 @@ class TopOpt(ABC):
         self.volfrac = volfrac
         self.rmin    = rmin
         self.penal   = 3
-        self.move    = np.concatenate((0.4*np.ones(self.num_elem),2./360*np.ones(self.num_elem)))
+        self.move    = np.concatenate((0.4*np.ones(self.num_elem),5./360*np.ones(self.num_elem)))
         
         self.sensitivity_filter = MeshIndependenceFilter(self.rmin, self.num_elem, self.centers)
         self.orientation_filter = OrientationRegularizationFilter(self.rmin, self.num_elem, self.centers)
@@ -173,8 +173,6 @@ class TopOpt(ABC):
             theta = self.orientation_filter.filter(theta)
             self.x = np.concatenate((rho,theta))
             
-            if self.mma.iter == 5: break
-            
         # Evaluating result from last iteration
         self.fea(self.x)
         
@@ -205,7 +203,6 @@ class TopOpt2D(TopOpt):
             dcdt[i] = -rho[i]**self.penal * ue.dot(dkdt.dot(ue))
             
         dcdt = self.sensitivity_filter.filter(rho, dcdt)
-        print(np.linalg.norm(dcdt))
         
         return np.concatenate((dcdrho, dcdt))
     

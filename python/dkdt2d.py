@@ -37,7 +37,7 @@ def dkdt2d(Ex,Ey,nuxy,T,V):
     dkdt[6,6] = -((2*Ex**2*np.cos(T)*np.sin(T))/3 - (2*Ex*Ey*np.cos(T)*np.sin(T))/3 + (2*Ex*Ey*nuxy*np.cos(T)**2)/3 - (2*Ex*Ey*nuxy*np.sin(T)**2)/3)/(- Ey*nuxy**2 + Ex)
     dkdt[6,7] = ((Ex*Ey*np.cos(2*T))/4 - (Ex**2*np.cos(2*T))/4 + (Ex*Ey*nuxy*np.sin(2*T))/2)/(- Ey*nuxy**2 + Ex)
     dkdt[7,7] = (2*Ex**2*np.cos(T)*np.sin(T) - 2*Ex*Ey*np.cos(T)*np.sin(T) + 2*Ex*Ey*nuxy*np.cos(T)**2 - 2*Ex*Ey*nuxy*np.sin(T)**2)/(- 3*Ey*nuxy**2 + 3*Ex)
-    dkdt = dkdt + dkdt.T - np.diag(dkdt.diagonal()) # symmetric matrix
-    dkdt = dkdt * V
+    dkdt += dkdt.T - np.diag(dkdt.diagonal()) # symmetric matrix
+    dkdt *= V
         
     return dkdt
