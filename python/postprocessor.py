@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from functools import partial
 
-from optimization import TopOpt
+from .optimization import TopOpt
 
 class PostProcessor():
     def __init__(self, solver):
@@ -33,7 +33,7 @@ class PostProcessor():
         ax.quiver(x, y, np.cos(theta), np.sin(theta), color='white', pivot='mid', headwidth=0, headlength=0, headaxislength=0)
 
         if save:
-            if filename is None: filename = TopOpt.res_dir + 'design.png'
+            if filename is None: filename = self.solver.res_dir / 'design.png'
             plt.savefig(filename)
         
     def plot_orientation(self, iteration=-1, fig=None, ax=None):
@@ -52,13 +52,13 @@ class PostProcessor():
         plt.ylabel(f'Compliance [{compliance_unit}]')
         
     def animate(self, filename=None):
-        if filename is None: filename = TopOpt.res_dir + 'animation.gif'
+        if filename is None: filename = self.solver.res_dir / 'animation.gif'
         fig, ax = plt.subplots(dpi=300)
         anim = FuncAnimation(fig, partial(self.plot, save=False, fig=fig, ax=ax), frames=len(self.solver.rho_hist))
         anim.save(filename)
         
     def animate_orientation(self, filename=None):
-        if filename is None: filename = TopOpt.res_dir + 'animation_o.gif'
+        if filename is None: filename = self.solver.res_dir / 'animation_o.gif'
         fig, ax = plt.subplots(dpi=300)
         anim = FuncAnimation(fig, partial(self.plot_orientation, fig=fig, ax=ax), frames=len(self.solver.rho_hist))
         anim.save(filename)

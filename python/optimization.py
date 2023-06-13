@@ -1,5 +1,6 @@
 import subprocess
 import time
+from pathlib import Path
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -17,16 +18,17 @@ Required APDL script files:
 TopOpt2D: 4-node 2D quad, PLANE182 in a rectangular domain
 TopOpt3D: 8-node 3D hex, SOLID185 in a cuboid domain
 
-TopOpt2D/TopOpt3D(inputfile, Ex, nu, volfrac, rmin, penal, theta0):
+TopOpt2D/TopOpt3D(inputfile, Ex, nu, volfrac, rmin, penal, theta0, jobname):
     inputfile: name of the model file (without .db)
     Ex, Ey, Gxy, nu: material properties
     volfrac: volume fraction constraint for the optimization
     rmin: radius of the filter (adjusts minimum feature size)
     theta0: initial orientation of the fibers, in degrees
+    jobname: subfolder of TopOpt.res_dir to store results for this optim. Defaults to no subfolder, stores results directly on TopOpt.res_dir
 
 Configure Ansys:
-    load_paths(ANSYS_path, script_dir, res_dir, mod_dir)
-    set_processors(np)
+    load_paths(ANSYS_path, script_dir, res_dir, mod_dir): paths as pathlib.Path
+    set_processors(np): np - number of processors for Ansys
 Optimization function: optim()
 """
 class TopOpt(ABC):
@@ -47,15 +49,18 @@ class TopOpt(ABC):
     def set_processors(np):
         TopOpt.np = np
     
-    def __init__(self, inputfile, Ex, Ey, Gxy, nu, volfrac, rmin, theta0):
-        self.meshdata_cmd = [TopOpt.ANSYS_path, '-b', '-i', TopOpt.script_dir+'ansys_meshdata.txt', '-o', TopOpt.res_dir+'meshdata.out']
-        self.result_cmd = [TopOpt.ANSYS_path, '-b', '-i', TopOpt.script_dir+'ansys_solve.txt', '-o', TopOpt.res_dir+'solve.out', '-smp', '-np', str(TopOpt.np)]
+    def __init__(self, inputfile, Ex, Ey, Gxy, nu, volfrac, rmin, theta0, jobname=None):
+        if jobname is None:
+            self.res_dir = TopOpt.res_dir
+        else:
+            self.res_dir = TopOpt.res_dir / jobname
+        self.res_dir.mkdir(parents=True, exist_ok=True)
         
-        TopOpt.write_pathfile(inputfile)
+        self.meshdata_cmd, self.result_cmd = self.build_apdl_scripts(inputfile)
         subprocess.run(self.meshdata_cmd)
         
-        self.num_elem, self.num_node = TopOpt.count_mesh()
-        self.centers, self.elemvol, self.elmnodes, self.node_coord = TopOpt.get_mesh_data()
+        self.num_elem, self.num_node = self.count_mesh()
+        self.centers, self.elemvol, self.elmnodes, self.node_coord = self.get_mesh_data()
     
         self.Ex     = Ex
         self.Ey     = Ey
@@ -79,22 +84,35 @@ class TopOpt(ABC):
         self.theta_hist = []
         self.comp_hist  = []
     
-    def write_pathfile(inputfile):
-        with open(TopOpt.res_dir+'path.txt', 'w') as f:
+    def build_apdl_scripts(self, inputfile):
+        with open(self.res_dir/'ansys_meshdata.txt', 'w') as f:
             f.write(f"RESUME,'{inputfile}','db','{TopOpt.mod_dir}',0,0\n")
-            f.write(f"/CWD,'{TopOpt.res_dir}'\n")
+            f.write(f"/CWD,'{self.res_dir}'\n")
             f.write(f"/FILENAME,{inputfile},1\n")
             f.write(f"/TITLE,{inputfile}\n")
+            f.write(open(TopOpt.script_dir/'ansys_meshdata.txt').read())
+            
+        with open(self.res_dir/'ansys_solve.txt', 'w') as f:
+            f.write(f"RESUME,'{inputfile}','db','{TopOpt.mod_dir}',0,0\n")
+            f.write(f"/CWD,'{self.res_dir}'\n")
+            f.write(f"/FILENAME,{inputfile},1\n")
+            f.write(f"/TITLE,{inputfile}\n")
+            f.write(open(TopOpt.script_dir/'ansys_solve.txt').read())
+            
+        meshdata_cmd = [TopOpt.ANSYS_path, '-b', '-i', self.res_dir/'ansys_meshdata.txt', '-o', self.res_dir/'meshdata.out']
+        result_cmd = [TopOpt.ANSYS_path, '-b', '-i', self.res_dir/'ansys_solve.txt', '-o', self.res_dir/'solve.out', '-smp', '-np', str(TopOpt.np)]
+            
+        return meshdata_cmd, result_cmd
     
-    def count_mesh():
-        count = np.loadtxt(TopOpt.res_dir+'elements_nodes_counts.txt', dtype=int) # num_elm num_nodes
+    def count_mesh(self):
+        count = np.loadtxt(self.res_dir/'elements_nodes_counts.txt', dtype=int) # num_elm num_nodes
         return count[0], count[1]
     
-    def get_mesh_data():
-        centers    = np.loadtxt(TopOpt.res_dir+'elements_centers.txt')[:, 1:] # label x y z
-        elmvol     = np.loadtxt(TopOpt.res_dir+'elements_volumn.txt')[:,1] # label elmvol
-        elmnodes   = np.loadtxt(TopOpt.res_dir+'elements_nodes.txt', dtype=int) - 1 # n1 n2 n3 n4 ...
-        node_coord = np.loadtxt(TopOpt.res_dir+'node_coordinates.txt') # x y z
+    def get_mesh_data(self):
+        centers    = np.loadtxt(self.res_dir/'elements_centers.txt')[:, 1:] # label x y z
+        elmvol     = np.loadtxt(self.res_dir/'elements_volumn.txt')[:,1] # label elmvol
+        elmnodes   = np.loadtxt(self.res_dir/'elements_nodes.txt', dtype=int) - 1 # n1 n2 n3 n4 ...
+        node_coord = np.loadtxt(self.res_dir/'node_coordinates.txt') # x y z
         return centers, elmvol, elmnodes, node_coord
     
     def optim_setup(self):
@@ -115,11 +133,11 @@ class TopOpt(ABC):
         Gxy = rho**self.penal * self.Gxy
         nu  = self.nu * np.ones(self.num_elem)
         material = np.array([Ex, Ey, Gxy, nu, np.rad2deg(theta)]).T
-        np.savetxt(TopOpt.res_dir+'material.txt', material, fmt=' %-.7E', newline='\n')
+        np.savetxt(self.res_dir/'material.txt', material, fmt=' %-.7E', newline='\n')
         
         # Solve
         subprocess.run(self.result_cmd)
-        energy = np.loadtxt(TopOpt.res_dir+'strain_energy.txt', dtype=float) # strain_energy
+        energy = np.loadtxt(self.res_dir/'strain_energy.txt', dtype=float) # strain_energy
         c = 2*np.sum(energy)
 
         self.rho_hist.append(rho)
@@ -155,6 +173,8 @@ class TopOpt(ABC):
             theta = self.orientation_filter.filter(theta)
             self.x = np.concatenate((rho,theta))
             
+            if self.mma.iter == 5: break
+            
         # Evaluating result from last iteration
         self.fea(self.x)
         
@@ -166,13 +186,13 @@ class TopOpt2D(TopOpt):
         rho, theta = np.split(x,2)
         
         # dc/drho
-        energy = np.loadtxt(TopOpt.res_dir+'strain_energy.txt', dtype=float) # strain_energy
+        energy = np.loadtxt(self.res_dir/'strain_energy.txt', dtype=float) # strain_energy
         uku = 2*energy/rho**self.penal # K: stiffness matrix with rho=1
         dcdrho = -self.penal * rho**(self.penal-1) * uku
         dcdrho = self.sensitivity_filter.filter(rho, dcdrho)
         
         # dc/dtheta
-        u = np.loadtxt(TopOpt.res_dir+'nodal_solution_u.txt', dtype=float) # ux uy (uz)
+        u = np.loadtxt(self.res_dir/'nodal_solution_u.txt', dtype=float) # ux uy (uz)
         dcdt = np.zeros(self.num_elem)
         for i in range(self.num_elem):
             from .dkdt2d import dkdt2d
@@ -185,6 +205,7 @@ class TopOpt2D(TopOpt):
             dcdt[i] = -rho[i]**self.penal * ue.dot(dkdt.dot(ue))
             
         dcdt = self.sensitivity_filter.filter(rho, dcdt)
+        print(np.linalg.norm(dcdt))
         
         return np.concatenate((dcdrho, dcdt))
     
@@ -193,13 +214,13 @@ class TopOpt3D(TopOpt):
         rho, theta = np.split(x,2)
         
         # dc/drho
-        energy = np.loadtxt(TopOpt.res_dir+'strain_energy.txt', dtype=float) # strain_energy
+        energy = np.loadtxt(self.res_dir/'strain_energy.txt', dtype=float) # strain_energy
         uku = 2*energy/rho**self.penal # K: stiffness matrix with rho=1
         dcdrho = -self.penal * rho**(self.penal-1) * uku
         dcdrho = self.sensitivity_filter.filter(rho, dcdrho)
         
         # dc/dtheta
-        u = np.loadtxt(TopOpt.res_dir+'nodal_solution_u.txt', dtype=float) # ux uy (uz)
+        u = np.loadtxt(self.res_dir/'nodal_solution_u.txt', dtype=float) # ux uy (uz)
         dcdt = np.zeros(self.num_elem)
         for i in range(self.num_elem):
             from .dkdt3d import dkdt3d

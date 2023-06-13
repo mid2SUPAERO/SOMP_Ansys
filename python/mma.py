@@ -59,12 +59,12 @@ class MMA():
         df0dx = self.dfobj(x)[np.newaxis].T
         fval = np.array([[self.const(x)]])
         dfdx = self.dconst(x)[np.newaxis]
-        self.fea_time = self.fea_time + time.time()-t0
+        self.fea_time += time.time()-t0
 
         t0 = time.time()
         xmma,ymma,zmma,lam,xsi,eta,mu,zet,s,self.low,self.upp = MMA.mmasub(self.m,self.n,self.iter,xval,self.xmin,self.xmax,
             xold1,xold2,f0val,df0dx,fval,dfdx,self.low,self.upp,self.a0,self.a,self.c,self.d,self.move)
-        self.iter_time = self.iter_time + time.time()-t0
+        self.iter_time += time.time()-t0
         
         self.iter = self.iter + 1
         self.xold2 = self.xold1.copy()
