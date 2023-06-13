@@ -1,5 +1,6 @@
 import subprocess
 import time
+from abc import ABC, abstractmethod
 
 import numpy as np
 
@@ -8,13 +9,14 @@ from .mma import MMA
 
 # https://github.com/pep-pig/Topology-optimization-of-structure-via-simp-method
 """
-Element type: 4-node 2D quad, PLANE182 in a rectangular domain
-
 Required APDL script files:
     ansys_meshdata.txt: gets mesh properties
     ansys_solve.txt: calls finite element analysis and stores results
 
-TopOpt(inputfile, Ex, nu, volfrac, rmin, penal, theta0):
+TopOpt2D: 4-node 2D quad, PLANE182 in a rectangular domain
+TopOpt3D: 8-node 3D hex, SOLID185 in a cuboid domain
+
+TopOpt2D/TopOpt3D(inputfile, Ex, nu, volfrac, rmin, penal, theta0):
     inputfile: name of the model file (without .db)
     Ex, Ey, Gxy, nu: material properties
     volfrac: volume fraction constraint for the optimization
@@ -26,7 +28,7 @@ Configure Ansys:
     set_processors(np)
 Optimization function: optim()
 """
-class TopOpt():
+class TopOpt(ABC):
     def load_paths(ANSYS_path, script_dir, res_dir, mod_dir):
         """
         ANSYS_path: MAPDL executable path
@@ -125,73 +127,9 @@ class TopOpt():
     
         return c
     
+    @abstractmethod
     def sensitivities(self, x):
-        rho, theta = np.split(x,2)
-        
-        # dc/drho
-        energy = np.loadtxt(TopOpt.res_dir+'strain_energy.txt', dtype=float) # strain_energy
-        uku = 2*energy/rho**self.penal # K: stiffness matrix with rho=1
-        dcdrho = -self.penal * rho**(self.penal-1) * uku
-        dcdrho = self.sensitivity_filter.filter(rho, dcdrho)
-        
-        # dc/dtheta
-        Ex = self.Ex
-        Ey = self.Ey
-        nuxy = self.nu
-        
-        u = np.loadtxt(TopOpt.res_dir+'nodal_solution_u.txt', dtype=float) # ux uy (uz)
-        dcdt = np.zeros(self.num_elem)
-        for i in range(self.num_elem):
-            T = theta[i]
-            dkdt = np.zeros((8,8))
-            dkdt[0,0] = -((2*Ex**2*np.cos(T)*np.sin(T))/3 - (2*Ex*Ey*np.cos(T)*np.sin(T))/3 + (2*Ex*Ey*nuxy*np.cos(T)**2)/3 - (2*Ex*Ey*nuxy*np.sin(T)**2)/3)/(- Ey*nuxy**2 + Ex)
-            dkdt[0,1] = -((Ex*Ey*np.cos(2*T))/4 - (Ex**2*np.cos(2*T))/4 + (Ex*Ey*nuxy*np.sin(2*T))/2)/(- Ey*nuxy**2 + Ex)
-            dkdt[0,2] = ((2*Ex**2*np.cos(T)*np.sin(T))/3 - (2*Ex*Ey*np.cos(T)*np.sin(T))/3 + (2*Ex*Ey*nuxy*np.cos(T)**2)/3 - (2*Ex*Ey*nuxy*np.sin(T)**2)/3)/(- Ey*nuxy**2 + Ex)
-            dkdt[0,3] = -(Ex*Ey*np.cos(2*T) - Ex**2*np.cos(2*T) + 2*Ex*Ey*nuxy*np.sin(2*T))/(4*(- Ey*nuxy**2 + Ex))
-            dkdt[0,4] = ((Ex**2*np.cos(T)*np.sin(T))/3 - (Ex*Ey*np.cos(T)*np.sin(T))/3 + (Ex*Ey*nuxy*np.cos(T)**2)/3 - (Ex*Ey*nuxy*np.sin(T)**2)/3)/(- Ey*nuxy**2 + Ex)
-            dkdt[0,5] = (Ex*Ey*np.cos(2*T) - Ex**2*np.cos(2*T) + 2*Ex*Ey*nuxy*np.sin(2*T))/(4*(- Ey*nuxy**2 + Ex))
-            dkdt[0,6] = -((Ex**2*np.cos(T)*np.sin(T))/3 - (Ex*Ey*np.cos(T)*np.sin(T))/3 + (Ex*Ey*nuxy*np.cos(T)**2)/3 - (Ex*Ey*nuxy*np.sin(T)**2)/3)/(- Ey*nuxy**2 + Ex)
-            dkdt[0,7] = ((Ex*Ey*np.cos(2*T))/4 - (Ex**2*np.cos(2*T))/4 + (Ex*Ey*nuxy*np.sin(2*T))/2)/(- Ey*nuxy**2 + Ex)
-            dkdt[1,1] = (2*Ex**2*np.cos(T)*np.sin(T) - 2*Ex*Ey*np.cos(T)*np.sin(T) + 2*Ex*Ey*nuxy*np.cos(T)**2 - 2*Ex*Ey*nuxy*np.sin(T)**2)/(- 3*Ey*nuxy**2 + 3*Ex)
-            dkdt[1,2] = (Ex*Ey*np.cos(2*T) - Ex**2*np.cos(2*T) + 2*Ex*Ey*nuxy*np.sin(2*T))/(4*(- Ey*nuxy**2 + Ex))
-            dkdt[1,3] = (4*((Ex**2*np.cos(T)*np.sin(T))/4 - (Ex*Ey*np.cos(T)*np.sin(T))/4 + (Ex*Ey*nuxy*np.cos(T)**2)/4 - (Ex*Ey*nuxy*np.sin(T)**2)/4))/(3*(- Ey*nuxy**2 + Ex))
-            dkdt[1,4] = (Ex*Ey*np.cos(2*T) - Ex**2*np.cos(2*T) + 2*Ex*Ey*nuxy*np.sin(2*T))/(4*(- Ey*nuxy**2 + Ex))
-            dkdt[1,5] = -(4*((Ex**2*np.cos(T)*np.sin(T))/4 - (Ex*Ey*np.cos(T)*np.sin(T))/4 + (Ex*Ey*nuxy*np.cos(T)**2)/4 - (Ex*Ey*nuxy*np.sin(T)**2)/4))/(3*(- Ey*nuxy**2 + Ex))
-            dkdt[1,6] = -((Ex*Ey*np.cos(2*T))/4 - (Ex**2*np.cos(2*T))/4 + (Ex*Ey*nuxy*np.sin(2*T))/2)/(- Ey*nuxy**2 + Ex)
-            dkdt[1,7] = -(4*Ex**2*np.cos(T)*np.sin(T) - 4*Ex*Ey*np.cos(T)*np.sin(T) + 4*Ex*Ey*nuxy*np.cos(T)**2 - 4*Ex*Ey*nuxy*np.sin(T)**2)/(- 6*Ey*nuxy**2 + 6*Ex)
-            dkdt[2,2] = -((2*Ex**2*np.cos(T)*np.sin(T))/3 - (2*Ex*Ey*np.cos(T)*np.sin(T))/3 + (2*Ex*Ey*nuxy*np.cos(T)**2)/3 - (2*Ex*Ey*nuxy*np.sin(T)**2)/3)/(- Ey*nuxy**2 + Ex)
-            dkdt[2,3] = ((Ex*Ey*np.cos(2*T))/4 - (Ex**2*np.cos(2*T))/4 + (Ex*Ey*nuxy*np.sin(2*T))/2)/(- Ey*nuxy**2 + Ex)
-            dkdt[2,4] = -((Ex**2*np.cos(T)*np.sin(T))/3 - (Ex*Ey*np.cos(T)*np.sin(T))/3 + (Ex*Ey*nuxy*np.cos(T)**2)/3 - (Ex*Ey*nuxy*np.sin(T)**2)/3)/(- Ey*nuxy**2 + Ex)
-            dkdt[2,5] = -((Ex*Ey*np.cos(2*T))/4 - (Ex**2*np.cos(2*T))/4 + (Ex*Ey*nuxy*np.sin(2*T))/2)/(- Ey*nuxy**2 + Ex)
-            dkdt[2,6] = ((Ex**2*np.cos(T)*np.sin(T))/3 - (Ex*Ey*np.cos(T)*np.sin(T))/3 + (Ex*Ey*nuxy*np.cos(T)**2)/3 - (Ex*Ey*nuxy*np.sin(T)**2)/3)/(- Ey*nuxy**2 + Ex)
-            dkdt[2,7] = -(Ex*Ey*np.cos(2*T) - Ex**2*np.cos(2*T) + 2*Ex*Ey*nuxy*np.sin(2*T))/(4*(- Ey*nuxy**2 + Ex))
-            dkdt[3,3] = (2*Ex**2*np.cos(T)*np.sin(T) - 2*Ex*Ey*np.cos(T)*np.sin(T) + 2*Ex*Ey*nuxy*np.cos(T)**2 - 2*Ex*Ey*nuxy*np.sin(T)**2)/(- 3*Ey*nuxy**2 + 3*Ex)
-            dkdt[3,4] = ((Ex*Ey*np.cos(2*T))/4 - (Ex**2*np.cos(2*T))/4 + (Ex*Ey*nuxy*np.sin(2*T))/2)/(- Ey*nuxy**2 + Ex)
-            dkdt[3,5] = -(4*Ex**2*np.cos(T)*np.sin(T) - 4*Ex*Ey*np.cos(T)*np.sin(T) + 4*Ex*Ey*nuxy*np.cos(T)**2 - 4*Ex*Ey*nuxy*np.sin(T)**2)/(- 6*Ey*nuxy**2 + 6*Ex)
-            dkdt[3,6] = -(Ex*Ey*np.cos(2*T) - Ex**2*np.cos(2*T) + 2*Ex*Ey*nuxy*np.sin(2*T))/(4*(- Ey*nuxy**2 + Ex))
-            dkdt[3,7] = -(4*((Ex**2*np.cos(T)*np.sin(T))/4 - (Ex*Ey*np.cos(T)*np.sin(T))/4 + (Ex*Ey*nuxy*np.cos(T)**2)/4 - (Ex*Ey*nuxy*np.sin(T)**2)/4))/(3*(- Ey*nuxy**2 + Ex))
-            dkdt[4,4] = -((2*Ex**2*np.cos(T)*np.sin(T))/3 - (2*Ex*Ey*np.cos(T)*np.sin(T))/3 + (2*Ex*Ey*nuxy*np.cos(T)**2)/3 - (2*Ex*Ey*nuxy*np.sin(T)**2)/3)/(- Ey*nuxy**2 + Ex)
-            dkdt[4,5] = -((Ex*Ey*np.cos(2*T))/4 - (Ex**2*np.cos(2*T))/4 + (Ex*Ey*nuxy*np.sin(2*T))/2)/(- Ey*nuxy**2 + Ex)
-            dkdt[4,6] = ((2*Ex**2*np.cos(T)*np.sin(T))/3 - (2*Ex*Ey*np.cos(T)*np.sin(T))/3 + (2*Ex*Ey*nuxy*np.cos(T)**2)/3 - (2*Ex*Ey*nuxy*np.sin(T)**2)/3)/(- Ey*nuxy**2 + Ex)
-            dkdt[4,7] = -(Ex*Ey*np.cos(2*T) - Ex**2*np.cos(2*T) + 2*Ex*Ey*nuxy*np.sin(2*T))/(4*(- Ey*nuxy**2 + Ex))
-            dkdt[5,5] = (2*Ex**2*np.cos(T)*np.sin(T) - 2*Ex*Ey*np.cos(T)*np.sin(T) + 2*Ex*Ey*nuxy*np.cos(T)**2 - 2*Ex*Ey*nuxy*np.sin(T)**2)/(- 3*Ey*nuxy**2 + 3*Ex)
-            dkdt[5,6] = (Ex*Ey*np.cos(2*T) - Ex**2*np.cos(2*T) + 2*Ex*Ey*nuxy*np.sin(2*T))/(4*(- Ey*nuxy**2 + Ex))
-            dkdt[5,7] = (4*((Ex**2*np.cos(T)*np.sin(T))/4 - (Ex*Ey*np.cos(T)*np.sin(T))/4 + (Ex*Ey*nuxy*np.cos(T)**2)/4 - (Ex*Ey*nuxy*np.sin(T)**2)/4))/(3*(- Ey*nuxy**2 + Ex))
-            dkdt[6,6] = -((2*Ex**2*np.cos(T)*np.sin(T))/3 - (2*Ex*Ey*np.cos(T)*np.sin(T))/3 + (2*Ex*Ey*nuxy*np.cos(T)**2)/3 - (2*Ex*Ey*nuxy*np.sin(T)**2)/3)/(- Ey*nuxy**2 + Ex)
-            dkdt[6,7] = ((Ex*Ey*np.cos(2*T))/4 - (Ex**2*np.cos(2*T))/4 + (Ex*Ey*nuxy*np.sin(2*T))/2)/(- Ey*nuxy**2 + Ex)
-            dkdt[7,7] = (2*Ex**2*np.cos(T)*np.sin(T) - 2*Ex*Ey*np.cos(T)*np.sin(T) + 2*Ex*Ey*nuxy*np.cos(T)**2 - 2*Ex*Ey*nuxy*np.sin(T)**2)/(- 3*Ey*nuxy**2 + 3*Ex)
-            dkdt = dkdt + dkdt.T - np.diag(dkdt.diagonal()) # symmetric matrix
-            dkdt = dkdt * self.elemvol[i]
-            
-            nodes = self.elmnodes[i,:]
-            ue = [u[nodes[0],0], u[nodes[0],1], u[nodes[1],0], u[nodes[1],1], u[nodes[2],0], u[nodes[2],1], u[nodes[3],0], u[nodes[3],1]]
-            ue = np.array(ue)
-            
-            dcdt[i] = -rho[i]**self.penal * ue.dot(dkdt.dot(ue))
-            
-        dcdt = self.sensitivity_filter.filter(rho, dcdt)
-        
-        return np.concatenate((dcdrho, dcdt))
+        pass
     
     # sum(rho.v)/(volfrac.V) - 1 <= 0
     def constraint(self, x):
@@ -221,3 +159,57 @@ class TopOpt():
         
         self.time = time.time() - t0
         return rho, theta
+    
+class TopOpt2D(TopOpt):
+    def sensitivities(self, x):
+        rho, theta = np.split(x,2)
+        
+        # dc/drho
+        energy = np.loadtxt(TopOpt.res_dir+'strain_energy.txt', dtype=float) # strain_energy
+        uku = 2*energy/rho**self.penal # K: stiffness matrix with rho=1
+        dcdrho = -self.penal * rho**(self.penal-1) * uku
+        dcdrho = self.sensitivity_filter.filter(rho, dcdrho)
+        
+        # dc/dtheta
+        u = np.loadtxt(TopOpt.res_dir+'nodal_solution_u.txt', dtype=float) # ux uy (uz)
+        dcdt = np.zeros(self.num_elem)
+        for i in range(self.num_elem):
+            from .dkdt2d import dkdt2d
+            dkdt = dkdt2d(self.Ex,self.Ey,self.nu,theta[i],self.elemvol[i])
+            
+            nodes = self.elmnodes[i,:]
+            ue = [u[nodes[0],0], u[nodes[0],1], u[nodes[1],0], u[nodes[1],1], u[nodes[2],0], u[nodes[2],1], u[nodes[3],0], u[nodes[3],1]]
+            ue = np.array(ue)
+            
+            dcdt[i] = -rho[i]**self.penal * ue.dot(dkdt.dot(ue))
+            
+        dcdt = self.sensitivity_filter.filter(rho, dcdt)
+        
+        return np.concatenate((dcdrho, dcdt))
+    
+class TopOpt3D(TopOpt):
+    def sensitivities(self, x):
+        rho, theta = np.split(x,2)
+        
+        # dc/drho
+        energy = np.loadtxt(TopOpt.res_dir+'strain_energy.txt', dtype=float) # strain_energy
+        uku = 2*energy/rho**self.penal # K: stiffness matrix with rho=1
+        dcdrho = -self.penal * rho**(self.penal-1) * uku
+        dcdrho = self.sensitivity_filter.filter(rho, dcdrho)
+        
+        # dc/dtheta
+        u = np.loadtxt(TopOpt.res_dir+'nodal_solution_u.txt', dtype=float) # ux uy (uz)
+        dcdt = np.zeros(self.num_elem)
+        for i in range(self.num_elem):
+            from .dkdt3d import dkdt3d
+            dkdt = dkdt3d(self.Ex,self.Ey,self.nu,theta[i],self.elemvol[i])
+            
+            nodes = self.elmnodes[i,:]
+            ue = [u[nodes[0],0], u[nodes[0],1], u[nodes[0],2], u[nodes[1],0], u[nodes[1],1], u[nodes[1],2], u[nodes[2],0], u[nodes[2],1], u[nodes[2],2], u[nodes[3],0], u[nodes[3],1], u[nodes[3],2], u[nodes[4],0], u[nodes[4],1], u[nodes[4],2], u[nodes[5],0], u[nodes[5],1], u[nodes[5],2], u[nodes[6],0], u[nodes[6],1], u[nodes[6],2], u[nodes[7],0], u[nodes[7],1], u[nodes[7],2]]
+            ue = np.array(ue)
+            
+            dcdt[i] = -rho[i]**self.penal * ue.dot(dkdt.dot(ue))
+            
+        dcdt = self.sensitivity_filter.filter(rho, dcdt)
+
+    return np.concatenate((dcdrho, dcdt))
