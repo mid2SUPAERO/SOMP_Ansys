@@ -46,5 +46,4 @@ with multiprocessing.Pool() as pool:
     for solver in pool.map(optim,theta0):
         post = PostProcessor(solver)
         # TODO results folder individual for each solver
-        # TODO solver.plot() saves figure
         # important data to save: theta0, compliance, iterations, execution time, CO2 footprint

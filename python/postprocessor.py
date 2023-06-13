@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from functools import partial
 
-from .optimization import TopOpt
+from optimization import TopOpt
 
 class PostProcessor():
     def __init__(self, solver):
@@ -20,7 +20,7 @@ class PostProcessor():
             
         return x, y, z
         
-    def plot(self, iteration=-1, fig=None, ax=None):
+    def plot(self, iteration=-1, filename=None, save=True, fig=None, ax=None):
         if fig == None: fig, ax = plt.subplots(dpi=300)
         ax.cla()
         ax.set_aspect('equal', 'box')
@@ -31,6 +31,10 @@ class PostProcessor():
         
         _, _, theta = self.make_grid(self.solver.theta_hist[iteration])
         ax.quiver(x, y, np.cos(theta), np.sin(theta), color='white', pivot='mid', headwidth=0, headlength=0, headaxislength=0)
+
+        if save:
+            if filename is None: filename = TopOpt.res_dir + 'design.png'
+            plt.savefig(filename)
         
     def plot_orientation(self, iteration=-1, fig=None, ax=None):
         if fig == None: fig, ax = plt.subplots(dpi=300)
@@ -50,7 +54,7 @@ class PostProcessor():
     def animate(self, filename=None):
         if filename is None: filename = TopOpt.res_dir + 'animation.gif'
         fig, ax = plt.subplots(dpi=300)
-        anim = FuncAnimation(fig, partial(self.plot, fig=fig, ax=ax), frames=len(self.solver.rho_hist))
+        anim = FuncAnimation(fig, partial(self.plot, save=False, fig=fig, ax=ax), frames=len(self.solver.rho_hist))
         anim.save(filename)
         
     def animate_orientation(self, filename=None):
