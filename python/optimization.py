@@ -36,8 +36,8 @@ class TopOpt():
         """
         TopOpt.ANSYS_path = ANSYS_path
         TopOpt.script_dir = script_dir
-        TopOpt.res_dir = res_dir
-        TopOpt.mod_dir = mod_dir
+        TopOpt.res_dir    = res_dir
+        TopOpt.mod_dir    = mod_dir
 
     # Running on Shared Memory Parallel
     np = 2
@@ -63,7 +63,7 @@ class TopOpt():
         self.volfrac = volfrac
         self.rmin    = rmin
         self.penal   = 3
-        self.move    = np.concatenate((0.4*np.ones(self.num_elem),0.01*np.ones(self.num_elem)))
+        self.move    = np.concatenate((0.4*np.ones(self.num_elem),2./360*np.ones(self.num_elem)))
         
         self.sensitivity_filter = MeshIndependenceFilter(self.rmin, self.num_elem, self.centers)
         self.orientation_filter = OrientationRegularizationFilter(self.rmin, self.num_elem, self.centers)
@@ -188,6 +188,8 @@ class TopOpt():
             ue = np.array(ue)
             
             dcdt[i] = -rho[i]**self.penal * ue.dot(dkdt.dot(ue))
+            
+        dcdt = self.sensitivity_filter.filter(rho, dcdt)
         
         return np.concatenate((dcdrho, dcdt))
     
@@ -214,11 +216,8 @@ class TopOpt():
             theta = self.orientation_filter.filter(theta)
             self.x = np.concatenate((rho,theta))
             
-        # Post-processing last iteration
-#         rho, theta = np.split(self.x,2)
-#         theta = GaussianFilter(self.num_elem, self.centers).filter(theta)
-#         self.x = np.concatenate((rho,theta))
+        # Evaluating result from last iteration
         self.fea(self.x)
+        
         self.time = time.time() - t0
-
         return rho, theta
