@@ -7,6 +7,7 @@ import numpy as np
 from .filters import MeshIndependenceFilter, OrientationRegularizationFilter, GaussianFilter
 from .mma import MMA
 
+# Starting point:
 # https://github.com/pep-pig/Topology-optimization-of-structure-via-simp-method
 """
 Required APDL script files:
@@ -80,10 +81,10 @@ class TopOpt(ABC):
     
     def write_pathfile(inputfile):
         with open(TopOpt.res_dir+'path.txt', 'w') as f:
+            f.write(f"RESUME,'{inputfile}','db','{TopOpt.mod_dir}',0,0\n")
             f.write(f"/CWD,'{TopOpt.res_dir}'\n")
             f.write(f"/FILENAME,{inputfile},1\n")
             f.write(f"/TITLE,{inputfile}\n")
-            f.write(f"RESUME,'{inputfile}','db','{TopOpt.mod_dir}',0,0\n")
     
     def count_mesh():
         count = np.loadtxt(TopOpt.res_dir+'elements_nodes_counts.txt', dtype=int) # num_elm num_nodes
@@ -212,4 +213,4 @@ class TopOpt3D(TopOpt):
             
         dcdt = self.sensitivity_filter.filter(rho, dcdt)
 
-    return np.concatenate((dcdrho, dcdt))
+        return np.concatenate((dcdrho, dcdt))
