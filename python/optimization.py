@@ -49,6 +49,7 @@ class TopOpt(ABC):
         TopOpt.np = np
     
     def __init__(self, inputfile, Ex, Ey, Gxy, nu, volfrac, rmin, theta0, jobname=None):
+        self.jobname = jobname
         if jobname is None:
             self.res_dir = TopOpt.res_dir
         else:
@@ -84,22 +85,28 @@ class TopOpt(ABC):
         self.comp_hist  = []
     
     def build_apdl_scripts(self, inputfile):
+        title = inputfile if self.jobname is None else self.jobname.replace('-','m')
+
         with open(self.res_dir/'ansys_meshdata.txt', 'w') as f:
             f.write(f"RESUME,'{inputfile}','db','{TopOpt.mod_dir}',0,0\n")
             f.write(f"/CWD,'{self.res_dir}'\n")
-            f.write(f"/FILENAME,{inputfile},1\n")
-            f.write(f"/TITLE,{inputfile}\n")
+            f.write(f"/FILENAME,{title},1\n")
+            f.write(f"/TITLE,{title}\n")
             f.write(open(TopOpt.script_dir/'ansys_meshdata.txt').read())
             
         with open(self.res_dir/'ansys_solve.txt', 'w') as f:
             f.write(f"RESUME,'{inputfile}','db','{TopOpt.mod_dir}',0,0\n")
             f.write(f"/CWD,'{self.res_dir}'\n")
-            f.write(f"/FILENAME,{inputfile},1\n")
-            f.write(f"/TITLE,{inputfile}\n")
+            f.write(f"/FILENAME,{title},1\n")
+            f.write(f"/TITLE,{title}\n")
             f.write(open(TopOpt.script_dir/'ansys_solve.txt').read())
             
         meshdata_cmd = [TopOpt.ANSYS_path, '-b', '-i', self.res_dir/'ansys_meshdata.txt', '-o', self.res_dir/'meshdata.out']
         result_cmd = [TopOpt.ANSYS_path, '-b', '-i', self.res_dir/'ansys_solve.txt', '-o', self.res_dir/'solve.out', '-smp', '-np', str(TopOpt.np)]
+
+        if not self.jobname is None:
+            meshdata_cmd += ['-j', title]
+            result_cmd += ['-j', title]
             
         return meshdata_cmd, result_cmd
     
