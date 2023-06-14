@@ -4,8 +4,6 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from functools import partial
 
-from .optimization import TopOpt
-
 class PostProcessor():
     def __init__(self, solver):
         self.solver = solver

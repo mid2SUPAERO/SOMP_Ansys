@@ -1,7 +1,6 @@
 import subprocess
 import time
-from pathlib import Path
-from abc import ABC, abstractmethod
+from abc import ABC
 
 import numpy as np
 
@@ -71,7 +70,7 @@ class TopOpt(ABC):
         self.volfrac = volfrac
         self.rmin    = rmin
         self.penal   = 3
-        self.move    = np.concatenate((0.4*np.ones(self.num_elem),5./360*np.ones(self.num_elem)))
+        self.move    = np.concatenate((0.4*np.ones(self.num_elem),2./360*np.ones(self.num_elem)))
         
         self.sensitivity_filter = MeshIndependenceFilter(self.rmin, self.num_elem, self.centers)
         self.orientation_filter = OrientationRegularizationFilter(self.rmin, self.num_elem, self.centers)
@@ -146,9 +145,18 @@ class TopOpt(ABC):
     
         return c
     
-    @abstractmethod
     def sensitivities(self, x):
-        pass
+        rho, theta = np.split(x,2)
+        dcdrho = self.dcdrho(rho)
+        dcdt = self.dcdt(rho, theta)
+        return np.concatenate((dcdrho, dcdt))
+        
+    def dcdrho(self, rho):
+        energy = np.loadtxt(self.res_dir/'strain_energy.txt', dtype=float) # strain_energy
+        uku = 2*energy/rho**self.penal # K: stiffness matrix with rho=1
+        dcdrho = -self.penal * rho**(self.penal-1) * uku
+        dcdrho = self.sensitivity_filter.filter(rho, dcdrho)
+        return dcdrho
     
     # sum(rho.v)/(volfrac.V) - 1 <= 0
     def constraint(self, x):
@@ -180,16 +188,7 @@ class TopOpt(ABC):
         return rho, theta
     
 class TopOpt2D(TopOpt):
-    def sensitivities(self, x):
-        rho, theta = np.split(x,2)
-        
-        # dc/drho
-        energy = np.loadtxt(self.res_dir/'strain_energy.txt', dtype=float) # strain_energy
-        uku = 2*energy/rho**self.penal # K: stiffness matrix with rho=1
-        dcdrho = -self.penal * rho**(self.penal-1) * uku
-        dcdrho = self.sensitivity_filter.filter(rho, dcdrho)
-        
-        # dc/dtheta
+    def dcdt(self, rho, theta):
         u = np.loadtxt(self.res_dir/'nodal_solution_u.txt', dtype=float) # ux uy (uz)
         dcdt = np.zeros(self.num_elem)
         for i in range(self.num_elem):
@@ -202,21 +201,12 @@ class TopOpt2D(TopOpt):
             
             dcdt[i] = -rho[i]**self.penal * ue.dot(dkdt.dot(ue))
             
-        dcdt = self.sensitivity_filter.filter(rho, dcdt)
+        # dcdt = self.sensitivity_filter.filter(rho, dcdt)
         
-        return np.concatenate((dcdrho, dcdt))
+        return dcdt
     
 class TopOpt3D(TopOpt):
-    def sensitivities(self, x):
-        rho, theta = np.split(x,2)
-        
-        # dc/drho
-        energy = np.loadtxt(self.res_dir/'strain_energy.txt', dtype=float) # strain_energy
-        uku = 2*energy/rho**self.penal # K: stiffness matrix with rho=1
-        dcdrho = -self.penal * rho**(self.penal-1) * uku
-        dcdrho = self.sensitivity_filter.filter(rho, dcdrho)
-        
-        # dc/dtheta
+    def dcdt(self, rho, theta):
         u = np.loadtxt(self.res_dir/'nodal_solution_u.txt', dtype=float) # ux uy (uz)
         dcdt = np.zeros(self.num_elem)
         for i in range(self.num_elem):
@@ -229,6 +219,6 @@ class TopOpt3D(TopOpt):
             
             dcdt[i] = -rho[i]**self.penal * ue.dot(dkdt.dot(ue))
             
-        dcdt = self.sensitivity_filter.filter(rho, dcdt)
+        # dcdt = self.sensitivity_filter.filter(rho, dcdt)
 
-        return np.concatenate((dcdrho, dcdt))
+        return dcdt
