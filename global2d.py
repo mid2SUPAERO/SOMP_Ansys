@@ -1,5 +1,4 @@
 from mpi4py import MPI
-from multiprocessing import Pool
 
 from pathlib import Path
 import numpy as np
@@ -12,7 +11,7 @@ script_dir = Path('python/')
 res_dir    = Path('results/multi/')
 mod_dir    = Path('models/')
 TopOpt2D.load_paths(ANSYS_path, script_dir, res_dir, mod_dir)
-TopOpt2D.set_processors(3)
+TopOpt2D.set_processors(2)
 
 # fiber: bamboo
 rhofiber  = 700e-12 # t/mm^3
@@ -45,33 +44,24 @@ comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
 
-instances_per_node = 5
+theta0 = np.linspace(-90, 90, num=size)
 
-Ntheta = instances_per_node * size
-theta0 = np.linspace(-90, 90, num=Ntheta)
+solver = TopOpt2D(inputfile='mbb30_15', Ex=Ex, Ey=Ey, Gxy=Gxy, nu=nu, volfrac=0.3, rmin=1.5, theta0=theta0[rank], jobname=str(int(theta0[rank])))
+solver.optim()
 
-def launch(theta):
-    solver = TopOpt2D(inputfile='mbb30_15', Ex=Ex, Ey=Ey, Gxy=Gxy, nu=nu, volfrac=0.3, rmin=1.5, theta0=theta, jobname=str(int(theta)))
-    solver.optim()
+post = PostProcessor(solver)
+post.animate()
+post.plot()
 
-    post = PostProcessor(solver)
-    post.animate()
-    post.plot()
+foorprint = 1000 * solver.CO2_footprint(rho, CO2mat, CO2veh)
 
-    return solver
-
-with Pool(instances_per_node) as p:
-    solvers = p.map(launch,theta0[rank*instances_per_node:(rank+1)*instances_per_node])
-
-comm.Barrier()
-solvers = comm.Gather(solvers, root=0)
-# TODO footprint
+solvers    = comm.Gather(solver)
+foorprints = comm.Gather(footprint)
 
 if rank == 0:
-    solvers = [item for sublist in solvers for ite, in sublist]
-    print(' theta0 comp iter time')
+    print(' theta0 comp iter time CO2')
     for i in range(size):
-        print('{:.1f} {:.4f} {:.0d} {:.2f}'.format(theta0[i],solvers[i].comp_hist[-1],solvers[i].mma.iter,solvers[i].time))
+        print('{:.1f} {:.4f} {:.0d} {:.2f} {:.2f}'.format(theta0[i],solvers[i].comp_hist[-1],solvers[i].mma.iter,solvers[i].time,footprints[i]))
 
     import os, glob
     for filename in glob.glob('cleanup*'): os.remove(filename)

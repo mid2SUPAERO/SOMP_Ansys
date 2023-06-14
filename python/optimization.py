@@ -43,7 +43,7 @@ class TopOpt(ABC):
         TopOpt.res_dir    = res_dir
         TopOpt.mod_dir    = mod_dir
 
-    # Running on Shared Memory Parallel
+    # Running on Distributed Memory Parallel
     np = 2
     def set_processors(np):
         TopOpt.np = np
@@ -57,7 +57,7 @@ class TopOpt(ABC):
         self.res_dir.mkdir(parents=True, exist_ok=True)
         
         self.meshdata_cmd, self.result_cmd = self.build_apdl_scripts(inputfile)
-        subprocess.run(self.meshdata_cmd)
+        subprocess.call(self.meshdata_cmd)
         
         self.num_elem, self.num_node = self.count_mesh()
         self.centers, self.elemvol, self.elmnodes, self.node_coord = self.get_mesh_data()
@@ -102,14 +102,14 @@ class TopOpt(ABC):
             f.write(open(TopOpt.script_dir/'ansys_solve.txt').read())
             
         meshdata_cmd = [TopOpt.ANSYS_path, '-b', '-i', self.res_dir/'ansys_meshdata.txt', '-o', self.res_dir/'meshdata.out']
-        result_cmd = [TopOpt.ANSYS_path, '-b', '-i', self.res_dir/'ansys_solve.txt', '-o', self.res_dir/'solve.out', '-smp', '-np', str(TopOpt.np)]
+        result_cmd = [TopOpt.ANSYS_path, '-b', '-i', self.res_dir/'ansys_solve.txt', '-o', self.res_dir/'solve.out', '-np', str(TopOpt.np)]
 
         if not self.jobname is None:
             meshdata_cmd += ['-j', title]
             result_cmd += ['-j', title]
             
         return meshdata_cmd, result_cmd
-    
+
     def count_mesh(self):
         count = np.loadtxt(self.res_dir/'elements_nodes_counts.txt', dtype=int) # num_elm num_nodes
         return count[0], count[1]
@@ -142,7 +142,7 @@ class TopOpt(ABC):
         np.savetxt(self.res_dir/'material.txt', material, fmt=' %-.7E', newline='\n')
         
         # Solve
-        subprocess.run(self.result_cmd)
+        subprocess.call(self.result_cmd)
         energy = np.loadtxt(self.res_dir/'strain_energy.txt', dtype=float) # strain_energy
         c = 2*np.sum(energy)
 
