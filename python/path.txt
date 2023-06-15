@@ -1,4 +1,0 @@
-/CWD,'D:\SOMP_Ansys\python\'
-/FILENAME,mbb30_15,1
-/TITLE,mbb30_15
-RESUME,'mbb30_15','db','D:\SOMP_Ansys\models\',0,0
