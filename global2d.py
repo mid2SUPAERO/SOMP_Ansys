@@ -1,6 +1,7 @@
 from mpi4py import MPI
 
 from pathlib import Path
+import time
 import numpy as np
 
 from python.optimization import TopOpt2D
@@ -40,28 +41,35 @@ rho = rhofiber*Vfiber + rhomatrix*Vmatrix
 CO2mat = (rhofiber*Vfiber*CO2fiber + rhomatrix*Vmatrix*CO2matrix)/rho # kgCO2/kg
 CO2veh = 1030 * 25 * 3.83 # kg_fuel/kg_transported/year * years * kgCO2/kg_fuel = kgCO2/kg
 
+t0 = time.time()
+
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
 
-theta0 = np.linspace(-90, 90, num=size)
+# Excludes -90, redundant with 90
+# size should be even to include 0
+theta0 = np.linspace(-90, 90, num=size+1)[:-1]
 
 solver = TopOpt2D(inputfile='mbb30_15', Ex=Ex, Ey=Ey, Gxy=Gxy, nu=nu, volfrac=0.3, rmin=1.5, theta0=theta0[rank], jobname=str(int(theta0[rank])))
 solver.optim()
+print('{} - Elasped time: {:.2f}s'.format(rank, solver.time))
+print('{} - FEA time: {:.2f}s'.format(rank, solver.mma.fea_time))
 
 post = PostProcessor(solver)
 post.animate()
 post.plot()
 
-foorprint = 1000 * solver.CO2_footprint(rho, CO2mat, CO2veh)
+footprint = 1000 * post.CO2_footprint(rho, CO2mat, CO2veh)
 
 solvers    = comm.Gather(solver)
-foorprints = comm.Gather(footprint)
+footprints = comm.Gather(footprint)
 
 if rank == 0:
-    print(' theta0 comp iter time CO2')
+    print('Total elapsed time: {:.2f}s'.format(time.time()-t0))
+    print('\ntheta0 comp   iter   time   CO2')
     for i in range(size):
-        print('{:.1f} {:.4f} {:.0d} {:.2f} {:.2f}'.format(theta0[i],solvers[i].comp_hist[-1],solvers[i].mma.iter,solvers[i].time,footprints[i]))
+        print('{:7.1f} {:7.4f} {:7.0d} {:7.2f} {:7.2f}'.format(theta0[i],solvers[i].comp_hist[-1],solvers[i].mma.iter,solvers[i].time,footprints[i]))
 
     import os, glob
     for filename in glob.glob('cleanup*'): os.remove(filename)
