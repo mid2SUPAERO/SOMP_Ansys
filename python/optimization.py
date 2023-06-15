@@ -11,10 +11,11 @@ from .mma import MMA
 # https://github.com/pep-pig/Topology-optimization-of-structure-via-simp-method
 """
 Required APDL script files:
-    ansys_meshdata.txt: gets mesh properties
+    ansys_meshdata_2d.txt: gets mesh properties for 2D optimization
+    ansys_meshdata_3d.txt: gets mesh properties for 3D optimization
     ansys_solve.txt: calls finite element analysis and stores results
 
-TopOpt2D: 4-node 2D quad, PLANE182 in a rectangular domain
+TopOpt2D: 4-node 2D quad, PLANE182 in a rectangular domain, with KEYOPT(3) = 3 plane stress with thk
 TopOpt3D: 8-node 3D hex, SOLID185 in a cuboid domain
 
 TopOpt2D/TopOpt3D(inputfile, Ex, nu, volfrac, rmin, penal, theta0, jobname):
@@ -25,9 +26,11 @@ TopOpt2D/TopOpt3D(inputfile, Ex, nu, volfrac, rmin, penal, theta0, jobname):
     theta0: initial orientation of the fibers, in degrees
     jobname: subfolder of TopOpt.res_dir to store results for this optim. Defaults to no subfolder, stores results directly on TopOpt.res_dir
 
-Configure Ansys:
+Configure Ansys: Same configuration for all TopOpt objects
     load_paths(ANSYS_path, script_dir, res_dir, mod_dir): paths as pathlib.Path
     set_processors(np): np - number of processors for Ansys
+        Runs on Shared Memory Parellel by default. If set_processors is called, will run on Distributed Memory Parallel
+
 Optimization function: optim()
 """
 class TopOpt(ABC):
@@ -43,10 +46,11 @@ class TopOpt(ABC):
         TopOpt.res_dir    = res_dir
         TopOpt.mod_dir    = mod_dir
 
-    # Running on Distributed Memory Parallel
     np = 2
+    smp = True
     def set_processors(np):
         TopOpt.np = np
+        TopOpt.smp = False
     
     def __init__(self, inputfile, Ex, Ey, Gxy, nu, volfrac, rmin, theta0, jobname=None):
         self.jobname = jobname
@@ -71,7 +75,7 @@ class TopOpt(ABC):
         self.volfrac = volfrac
         self.rmin    = rmin
         self.penal   = 3
-        self.move    = np.concatenate((0.4*np.ones(self.num_elem),2./360*np.ones(self.num_elem)))
+        self.move    = np.concatenate((0.4*np.ones(self.num_elem),15./360*np.ones(self.num_elem)))
         
         self.sensitivity_filter = MeshIndependenceFilter(self.rmin, self.num_elem, self.centers)
         self.orientation_filter = OrientationRegularizationFilter(self.rmin, self.num_elem, self.centers)
@@ -86,13 +90,14 @@ class TopOpt(ABC):
     
     def build_apdl_scripts(self, inputfile):
         title = inputfile if self.jobname is None else self.jobname.replace('-','m')
+        meshdata_base = 'ansys_meshdata_2d.txt' if isinstance(self,TopOpt2D) else 'ansys_meshdata_3d.txt'
 
         with open(self.res_dir/'ansys_meshdata.txt', 'w') as f:
             f.write(f"RESUME,'{inputfile}','db','{TopOpt.mod_dir}',0,0\n")
             f.write(f"/CWD,'{self.res_dir}'\n")
             f.write(f"/FILENAME,{title},1\n")
             f.write(f"/TITLE,{title}\n")
-            f.write(open(TopOpt.script_dir/'ansys_meshdata.txt').read())
+            f.write(open(TopOpt.script_dir/meshdata_base).read())
             
         with open(self.res_dir/'ansys_solve.txt', 'w') as f:
             f.write(f"RESUME,'{inputfile}','db','{TopOpt.mod_dir}',0,0\n")
@@ -100,13 +105,15 @@ class TopOpt(ABC):
             f.write(f"/FILENAME,{title},1\n")
             f.write(f"/TITLE,{title}\n")
             f.write(open(TopOpt.script_dir/'ansys_solve.txt').read())
-            
-        meshdata_cmd = [TopOpt.ANSYS_path, '-b', '-i', self.res_dir/'ansys_meshdata.txt', '-o', self.res_dir/'meshdata.out']
+                  
+        meshdata_cmd = [TopOpt.ANSYS_path, '-b', '-i', self.res_dir/'ansys_meshdata.txt', '-o', self.res_dir/'meshdata.out', '-smp']
         result_cmd = [TopOpt.ANSYS_path, '-b', '-i', self.res_dir/'ansys_solve.txt', '-o', self.res_dir/'solve.out', '-np', str(TopOpt.np)]
 
         if not self.jobname is None:
             meshdata_cmd += ['-j', title]
             result_cmd += ['-j', title]
+            
+        if TopOpt.smp: result_cmd += ['-smp']
             
         return meshdata_cmd, result_cmd
 
@@ -116,7 +123,7 @@ class TopOpt(ABC):
     
     def get_mesh_data(self):
         centers    = np.loadtxt(self.res_dir/'elements_centers.txt')[:, 1:] # label x y z
-        elmvol     = np.loadtxt(self.res_dir/'elements_volumn.txt')[:,1] # label elmvol
+        elmvol     = np.loadtxt(self.res_dir/'elements_volume.txt')[:,1] # label elmvol
         elmnodes   = np.loadtxt(self.res_dir/'elements_nodes.txt', dtype=int) - 1 # n1 n2 n3 n4 ...
         node_coord = np.loadtxt(self.res_dir/'node_coordinates.txt') # x y z
         return centers, elmvol, elmnodes, node_coord
@@ -185,7 +192,7 @@ class TopOpt(ABC):
             if convergence < 1e-3: break
 
             rho, theta = np.split(xnew,2)
-            theta = self.orientation_filter.filter(theta)
+            theta = self.orientation_filter.filter(rho,theta)
             self.x = np.concatenate((rho,theta))
             
         # Evaluating result from last iteration
@@ -196,7 +203,7 @@ class TopOpt(ABC):
     
 class TopOpt2D(TopOpt):
     def dcdt(self, rho, theta):
-        u = np.loadtxt(self.res_dir/'nodal_solution_u.txt', dtype=float) # ux uy (uz)
+        u = np.loadtxt(self.res_dir/'nodal_solution_u.txt', dtype=float) # ux uy uz
         dcdt = np.zeros(self.num_elem)
         for i in range(self.num_elem):
             from .dkdt2d import dkdt2d
@@ -214,7 +221,7 @@ class TopOpt2D(TopOpt):
     
 class TopOpt3D(TopOpt):
     def dcdt(self, rho, theta):
-        u = np.loadtxt(self.res_dir/'nodal_solution_u.txt', dtype=float) # ux uy (uz)
+        u = np.loadtxt(self.res_dir/'nodal_solution_u.txt', dtype=float) # ux uy uz
         dcdt = np.zeros(self.num_elem)
         for i in range(self.num_elem):
             from .dkdt3d import dkdt3d

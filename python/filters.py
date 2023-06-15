@@ -1,8 +1,7 @@
 import numpy as np
-from scipy.sparse import coo_matrix
+from scipy.sparse import coo_matrix, diags
 from scipy.ndimage import gaussian_filter
 
-# https://www.rmit.edu.au/research/centres-collaborations/centre-for-innovative-structures-and-materials/software
 """
 Weights: max{0, rmin-distance(i,j)}
 """
@@ -25,6 +24,7 @@ class ConvolutionFilter():
         elmDis = (np.maximum(0,SqED).getA())**0.5
         return np.matrix(elmDis)
     
+    # https://www.rmit.edu.au/research/centres-collaborations/centre-for-innovative-structures-and-materials/software
     def preFlt(rmin, num_elem, centers):
         if rmin == 0: return np.identity(num_elem)
         try:
@@ -48,9 +48,6 @@ class ConvolutionFilter():
         return H
     
 class MeshIndependenceFilter(ConvolutionFilter):
-    def __init__(self, rmin, num_elem, centers):
-        super().__init__(rmin,num_elem,centers)
-        
     def filter(self, rho, dc):
         return self.H.dot(rho*dc)/rho
 
@@ -59,10 +56,21 @@ class OrientationRegularizationFilter(ConvolutionFilter):
         super().__init__(rmin,num_elem,centers)
         self.H = self.H.tocsr()
         
-    def filter(self, theta):
+    def filter(self, rho, theta):
+        # multiply each column by the correspondent rho
+        a = diags(rho)
+        H = self.H @ a
+        
+        # divide each line by its sum (renormalize weights)
+        a = diags(1/H.sum(axis=1).A.ravel())
+        H = a @ H 
+        
+        # theta_i hat = -theta_i if theta_e.theta_i <= 0 else theta_i 
         sign = np.sign(np.outer(theta,theta))
         sign[np.where(sign==0)] = -1
-        return self.H.multiply(sign).dot(theta)
+        H = H.multiply(sign)
+        
+        return H.dot(theta)
     
 class GaussianFilter():   
     def __init__(self, num_elem, centers):
