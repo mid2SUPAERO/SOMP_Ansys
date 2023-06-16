@@ -2,7 +2,7 @@ import numpy as np
 
 from abc import ABC, abstractmethod
 
-from matplotlib import cm, colorbar
+from matplotlib import cm, colors
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from functools import partial
@@ -52,7 +52,8 @@ class Post2D(PostProcessor):
         plt.title('Compliance = {:.4f}'.format(self.solver.comp_hist[iteration]))
         
         x, y, density = self.make_grid(self.solver.rho_hist[iteration], nodes=True)
-        ax.pcolormesh(x, y, density, cmap='binary')
+        norm = colors.Normalize(vmin=0, vmax=1)
+        ax.pcolormesh(x, y, density, cmap='binary', norm=norm)
         
         x, y, theta = self.make_grid(self.solver.theta_hist[iteration], nodes=False)
         ax.quiver(x, y, np.cos(theta), np.sin(theta), color='white', pivot='mid', headwidth=0, headlength=0, headaxislength=0)
@@ -106,11 +107,10 @@ class Post3D(PostProcessor):
         threshold = 0.5
 
         if ax is None:
-            fig = plt.figure(dpi=300)
-            ax = fig.add_axes([0.1, 0.1, 0.8, 0.8], projection='3d')
-            ax_cb = fig.add_axes([0.9, 0.3, 0.02, 0.45])
-            colorbar.ColorbarBase(ax_cb, cmap='binary', orientation='vertical')
-        ax.set_box_aspect((np.amax(self.solver.node_coord[:,0]),np.amax(self.solver.node_coord[:,1]),np.amax(self.solver.node_coord[:,2])))
+            fig = plt.figure(dpi=500)
+            ax = fig.add_axes([0,0,1,1], projection='3d')
+            ax.set_box_aspect((np.amax(self.solver.node_coord[:,0]),np.amax(self.solver.node_coord[:,1]),np.amax(self.solver.node_coord[:,2])))
+        ax.cla()
         plt.title('Compliance = {:.4f}'.format(self.solver.comp_hist[iteration]))
     
         cmap = cm.get_cmap('binary')
@@ -118,34 +118,67 @@ class Post3D(PostProcessor):
             if data[elem] > threshold:
                 self.plotCube(ax, elem, cmap(data[elem]), alpha=0.5)
                 
-        # x, y, z, theta = self.make_grid(self.solver.theta_hist[iteration])
-        # ax.quiver(x, y, z, np.cos(theta), np.sin(theta), np.zeros_like(theta), color='red', pivot='mid', headwidth=0, headlength=0, headaxislength=0)
-        
         if save:
             if filename is None: filename = self.solver.res_dir / 'design.png'
             plt.savefig(filename)
             
-    def plot_orientation(self, filename=None, save=True, iteration=-1, fig=None, ax=None):
-        pass
-        # if ax is None:
-        #     fig = plt.figure(dpi=300)
-        #     ax = fig.add_axes([0.1, 0.1, 0.8, 0.8], projection='3d')
-        #     ax.set_box_aspect((np.amax(self.solver.node_coord[:,0]),np.amax(self.solver.node_coord[:,1]),np.amax(self.solver.node_coord[:,2])))
-        # ax.cla()
-        # plt.title('Compliance = {:.4f}'.format(self.solver.comp_hist[iteration])) 
+    def plot_layer(self, iteration=-1, layer=0, filename=None, save=True, fig=None, ax=None):
+        if fig == None: fig, ax = plt.subplots(dpi=300)
+        ax.cla()
+        ax.set_aspect('equal', 'box')
+        plt.title('Layer {}'.format(layer))
         
-        # x, y, z, theta = self.make_grid(self.solver.theta_hist[iteration])
-        # ax.quiver(x, y, z, np.cos(theta), np.sin(theta), np.zeros_like(theta), pivot='mid', headwidth=0, headlength=0, headaxislength=0)
+        x, y, density = self.make_grid_2d(layer, self.solver.rho_hist[iteration], nodes=True)
+        norm = colors.Normalize(vmin=0, vmax=1)
+        ax.pcolormesh(x, y, density, cmap='binary', norm=norm)
         
-        # if save:
-        #     if filename is None: filename = self.solver.res_dir / 'orientation.png'
-        #     plt.savefig(filename)
+        x, y, theta = self.make_grid_2d(layer, self.solver.theta_hist[iteration], nodes=False)
+        ax.quiver(x, y, np.cos(theta), np.sin(theta), color='white', pivot='mid', headwidth=0, headlength=0, headaxislength=0)
+
+        if save:
+            if filename is None: filename = self.solver.res_dir / f'design_layer{layer}.png'
+            plt.savefig(filename)
+            
+    def plot_orientation(self, iteration=-1, filename=None, save=True, fig=None, ax=None):
+        if ax is None:
+            fig = plt.figure(dpi=300)
+            ax = fig.add_axes([0,0,1,1], projection='3d')
+            # ax.set_box_aspect((np.amax(self.solver.node_coord[:,0]),np.amax(self.solver.node_coord[:,1]),np.amax(self.solver.node_coord[:,2])))
+        ax.cla()
+        plt.title('Compliance = {:.4f}'.format(self.solver.comp_hist[iteration])) 
+        
+        x, y, z, theta, length = self.make_grid_3d(self.solver.theta_hist[iteration])
+        ax.quiver(x, y, z, np.cos(theta), np.sin(theta), np.zeros_like(theta), color='red', pivot='middle', arrow_length_ratio=0, linewidth=0.3, length=length)
+        
+        if save:
+            if filename is None: filename = self.solver.res_dir / 'orientation.png'
+            plt.savefig(filename)
     
+    # Expensive, not so good
     def animate(self, filename=None):
-        pass
-    
+        if filename is None: filename = self.solver.res_dir / 'animation.gif'
+        
+        fig = plt.figure(dpi=500)
+        ax = fig.add_axes([0,0,1,1], projection='3d')
+        ax.set_box_aspect((np.amax(self.solver.node_coord[:,0]),np.amax(self.solver.node_coord[:,1]),np.amax(self.solver.node_coord[:,2])))
+        
+        anim = FuncAnimation(fig, partial(self.plot, save=False, fig=fig, ax=ax), frames=len(self.solver.rho_hist))
+        anim.save(filename)
+        
     def animate_orientation(self, filename=None):
-        pass
+        if filename is None: filename = self.solver.res_dir / 'animation_o.gif'
+        
+        fig = plt.figure(dpi=500)
+        ax = fig.add_axes([0,0,1,1], projection='3d')
+        
+        anim = FuncAnimation(fig, partial(self.plot_orientation, fig=fig, ax=ax), frames=len(self.solver.rho_hist))
+        anim.save(filename)
+        
+    def animate_layer(self, layer, filename=None):
+        if filename is None: filename = self.solver.res_dir / f'animation_layer{layer}.gif'
+        fig, ax = plt.subplots(dpi=300)
+        anim = FuncAnimation(fig, partial(self.plot_layer, layer=layer, save=False, fig=fig, ax=ax), frames=len(self.solver.rho_hist))
+        anim.save(filename)
     
     ## --------------
     def plotCube(self, ax, elem, c, alpha=0.5):
@@ -177,13 +210,29 @@ class Post3D(PostProcessor):
         z = np.array([[coord[0,2],coord[4,2]],[coord[3,2],coord[7,2]]])
         ax.plot_surface(x, y, z, color=c, rstride=1, cstride=1, alpha=alpha)
         
-    def make_grid(self, result):
-        x, y, z = np.meshgrid(np.unique(self.solver.centers[:,0]),np.unique(self.solver.centers[:,1]),np.unique(self.solver.centers[:,2]))
+    def make_grid_2d(self, layer, result, nodes):
+        x, y = np.meshgrid(np.unique(self.solver.centers[:,0]),np.unique(self.solver.centers[:,1]))
+        z = np.unique(self.solver.centers[:,0])[layer]
         res = np.zeros_like(x)
         for e in range(self.solver.num_elem):
-            i = np.where(x[0,:,:] == self.solver.centers[e,0])[0][0]
-            j = np.where(y[:,0,:] == self.solver.centers[e,1])[0][0]
-            k = np.where(z[:,:,0] == self.solver.centers[e,2])[0][0]
-            res[j,i,k] = result[e]
+            if not self.solver.centers[e,2] == z: continue
+            i = np.where(x[0,:] == self.solver.centers[e,0])[0][0]
+            j = np.where(y[:,0] == self.solver.centers[e,1])[0][0]
+            res[j,i] = result[e]
+        
+        if nodes:
+            x, y = np.meshgrid(np.unique(self.solver.node_coord[:,0]),np.unique(self.solver.node_coord[:,1]))
             
-        return x, y, z, res
+        return x, y, res
+        
+    def make_grid_3d(self, result):
+        x, y, z = np.meshgrid(np.unique(self.solver.centers[:,0]),np.unique(self.solver.centers[:,1]),np.unique(self.solver.centers[:,2]))
+        length = 0.9*(z[0,0,0]-z[0,0,1])
+        res = np.zeros_like(x)
+        for e in range(self.solver.num_elem):
+            i = np.where(x[0,:,0] == self.solver.centers[e,0])[0][0]
+            j = np.where(y[:,0,0] == self.solver.centers[e,1])[0][0]
+            k = np.where(z[0,0,:] == self.solver.centers[e,2])[0][0]
+            res[j,i,k] = result[e]
+
+        return x, y, z, res, length
