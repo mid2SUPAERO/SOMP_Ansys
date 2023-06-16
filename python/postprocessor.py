@@ -27,22 +27,6 @@ class PostProcessor(ABC):
         plt.plot(self.solver.comp_hist)
         plt.xlabel('Iteration')
         plt.ylabel(f'Compliance [{compliance_unit}]')
-    
-    @abstractmethod
-    def plot(self, iteration=-1, filename=None, save=True, fig=None, ax=None):
-        pass
-    
-    @abstractmethod
-    def plot_orientation(self, filename=None, save=True, iteration=-1, fig=None, ax=None):
-        pass
-    
-    @abstractmethod
-    def animate(self, filename=None):
-        pass
-    
-    @abstractmethod
-    def animate_orientation(self, filename=None):
-        pass
 
 class Post2D(PostProcessor):
     def plot(self, iteration=-1, filename=None, save=True, fig=None, ax=None):
@@ -68,7 +52,7 @@ class Post2D(PostProcessor):
         ax.set_aspect('equal', 'box')
         plt.title('Compliance = {:.4f}'.format(self.solver.comp_hist[iteration])) 
         
-        x, y, theta = self.make_grid(self.solver.theta_hist[iteration])
+        x, y, theta = self.make_grid(self.solver.theta_hist[iteration], nodes=False)
         ax.quiver(x, y, np.cos(theta), np.sin(theta), pivot='mid', headwidth=0, headlength=0, headaxislength=0)
         
         if save:
