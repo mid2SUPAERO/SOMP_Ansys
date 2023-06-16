@@ -12,7 +12,7 @@ script_dir = Path('python/')
 res_dir    = Path('results/multi/')
 mod_dir    = Path('models/')
 TopOpt2D.load_paths(ANSYS_path, script_dir, res_dir, mod_dir)
-TopOpt2D.set_processors(2)
+TopOpt2D.set_processors(4)
 
 # fiber: bamboo
 rhofiber  = 700e-12 # t/mm^3
@@ -47,16 +47,16 @@ comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
 
-# Excludes -90, redundant with 90
-# size should be even to include 0
+# Excludes -90 degrees, redundant with 90 degrees
+# size should be even to include 0 degrees
 theta0 = np.linspace(-90, 90, num=size+1)[:-1]
 
-solver = TopOpt2D(inputfile='mbb30_15', Ex=Ex, Ey=Ey, nuxy=nuxy, nuyz=numatrix, Gxy=Gxy, volfrac=0.3, rmin=1.5, theta0=theta0[rank], jobname=str(int(theta0[rank])))
+solver = TopOpt2D(inputfile='mbb2d', Ex=Ex, Ey=Ey, nuxy=nuxy, nuyz=vmatrix, Gxy=Gxy, volfrac=0.3, rmin=6, theta0=theta0[rank], jobname=str(int(theta0[rank])))
 solver.optim()
 print('{} - Elasped time: {:.2f}s'.format(rank, solver.time))
 print('{} - FEA time: {:.2f}s'.format(rank, solver.mma.fea_time))
 
-post = PostProcessor(solver)
+post = Post2D(solver)
 post.animate()
 post.plot()
 
