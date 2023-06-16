@@ -52,7 +52,7 @@ class TopOpt(ABC):
         TopOpt.np = np
         TopOpt.smp = False
     
-    def __init__(self, inputfile, Ex, Ey, Gxy, nu, volfrac, rmin, theta0, jobname=None):
+    def __init__(self, inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, rmin, theta0, jobname=None):
         self.jobname = jobname
         if jobname is None:
             self.res_dir = TopOpt.res_dir
@@ -68,8 +68,9 @@ class TopOpt(ABC):
     
         self.Ex     = Ex
         self.Ey     = Ey
+        self.nuxy   = nuxy
+        self.nuyz   = nuyz
         self.Gxy    = Gxy
-        self.nu     = nu
         self.theta0 = np.deg2rad(theta0)
         
         self.volfrac = volfrac
@@ -141,11 +142,13 @@ class TopOpt(ABC):
         rho, theta = np.split(x,2)
         
         # Generate file with material properties for each element
-        Ex  = rho**self.penal * self.Ex
-        Ey  = rho**self.penal * self.Ey
-        Gxy = rho**self.penal * self.Gxy
-        nu  = self.nu * np.ones(self.num_elem)
-        material = np.array([Ex, Ey, Gxy, nu, np.rad2deg(theta)]).T
+        Ex   = rho**self.penal * self.Ex
+        Ey   = rho**self.penal * self.Ey
+        nuxy = self.nuxy * np.ones(self.num_elem)
+        nuyz = self.nuyz * np.ones(self.num_elem)
+        Gxy  = rho**self.penal * self.Gxy
+        Gyz  = Ey/(2*(1+nuyz))
+        material = np.array([Ex, Ey, nuxy, nuyz, Gxy, Gyz, np.rad2deg(theta)]).T
         np.savetxt(self.res_dir/'material.txt', material, fmt=' %-.7E', newline='\n')
         
         # Solve
@@ -207,7 +210,7 @@ class TopOpt2D(TopOpt):
         dcdt = np.zeros(self.num_elem)
         for i in range(self.num_elem):
             from .dkdt2d import dkdt2d
-            dkdt = dkdt2d(self.Ex,self.Ey,self.nu,theta[i],self.elemvol[i])
+            dkdt = dkdt2d(self.Ex,self.Ey,self.nuxy,theta[i],self.elemvol[i])
             
             nodes = self.elmnodes[i,:]
             ue = [u[nodes[0],0], u[nodes[0],1], u[nodes[1],0], u[nodes[1],1], u[nodes[2],0], u[nodes[2],1], u[nodes[3],0], u[nodes[3],1]]
@@ -225,7 +228,7 @@ class TopOpt3D(TopOpt):
         dcdt = np.zeros(self.num_elem)
         for i in range(self.num_elem):
             from .dkdt3d import dkdt3d
-            dkdt = dkdt3d(self.Ex,self.Ey,self.nu,theta[i],self.elemvol[i])
+            dkdt = dkdt3d(self.Ex,self.Ey,self.nuxy,self.nuyz,theta[i],self.elemvol[i])
             
             nodes = self.elmnodes[i,:]
             ue = [u[nodes[0],0], u[nodes[0],1], u[nodes[0],2], u[nodes[1],0], u[nodes[1],1], u[nodes[1],2], u[nodes[2],0], u[nodes[2],1], u[nodes[2],2], u[nodes[3],0], u[nodes[3],1], u[nodes[3],2], u[nodes[4],0], u[nodes[4],1], u[nodes[4],2], u[nodes[5],0], u[nodes[5],1], u[nodes[5],2], u[nodes[6],0], u[nodes[6],1], u[nodes[6],2], u[nodes[7],0], u[nodes[7],1], u[nodes[7],2]]

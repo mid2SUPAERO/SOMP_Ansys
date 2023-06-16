@@ -32,11 +32,11 @@ Vmatrix = 1-Vfiber
 Gfiber  = Efiber/(2*(1+vfiber))
 Gmatrix = Ematrix/(2*(1+vmatrix))
 
-Ex  = Efiber*Vfiber + Ematrix*Vmatrix
-Ey  = Efiber*Ematrix / (Efiber*Vmatrix + Ematrix*Vfiber)
-Gxy = Gfiber*Gmatrix / (Gfiber*Vmatrix + Gmatrix*Vfiber)
-nu  = vfiber*Vfiber + vmatrix*Vmatrix
-rho = rhofiber*Vfiber + rhomatrix*Vmatrix
+Ex   = Efiber*Vfiber + Ematrix*Vmatrix
+Ey   = Efiber*Ematrix / (Efiber*Vmatrix + Ematrix*Vfiber)
+Gxy  = Gfiber*Gmatrix / (Gfiber*Vmatrix + Gmatrix*Vfiber)
+nuxy = vfiber*Vfiber + vmatrix*Vmatrix
+rho  = rhofiber*Vfiber + rhomatrix*Vmatrix
 
 CO2mat = (rhofiber*Vfiber*CO2fiber + rhomatrix*Vmatrix*CO2matrix)/rho # kgCO2/kg
 CO2veh = 1030 * 25 * 3.83 # kg_fuel/kg_transported/year * years * kgCO2/kg_fuel = kgCO2/kg
@@ -51,7 +51,7 @@ size = comm.Get_size()
 # size should be even to include 0
 theta0 = np.linspace(-90, 90, num=size+1)[:-1]
 
-solver = TopOpt2D(inputfile='mbb30_15', Ex=Ex, Ey=Ey, Gxy=Gxy, nu=nu, volfrac=0.3, rmin=1.5, theta0=theta0[rank], jobname=str(int(theta0[rank])))
+solver = TopOpt2D(inputfile='mbb30_15', Ex=Ex, Ey=Ey, nuxy=nuxy, nuyz=numatrix, Gxy=Gxy, volfrac=0.3, rmin=1.5, theta0=theta0[rank], jobname=str(int(theta0[rank])))
 solver.optim()
 print('{} - Elasped time: {:.2f}s'.format(rank, solver.time))
 print('{} - FEA time: {:.2f}s'.format(rank, solver.mma.fea_time))
@@ -62,8 +62,8 @@ post.plot()
 
 footprint = 1000 * post.CO2_footprint(rho, CO2mat, CO2veh)
 
-solvers    = comm.Gather(solver)
-footprints = comm.Gather(footprint)
+solvers    = comm.gather(solver)
+footprints = comm.gather(footprint)
 
 if rank == 0:
     print('Total elapsed time: {:.2f}s'.format(time.time()-t0))

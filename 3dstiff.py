@@ -2,22 +2,32 @@ from sympy import *
 
 V = symbols('V')
 
-Ex, Ey, Ez, nuxy, nuyz, nuxz, Gxy, Gyz, Gzx = symbols('Ex Ey Ez nuxy nuyz nuxz Gxy Gyz Gzx')
+# Transverse isotropy, symmetry planne yz
+# Constants: Ex, Ey, nuxy, nuyz, Gxy
+# Non-independent:
+# Ez = Ey
+# nuxz = nuxy
+# Gzx = Gxy
+# Gyz = Ey/(2*(1+nuyz))
+Ex, Ey, nuxy, nuyz, Gxy = symbols('Ex Ey nuxy nuyz Gxy')
 nuyx = nuxy*Ey/Ex
-nuzy = nuyz*Ez/Ey
-nuzx = nuxz*Ez/Ex
 
-#k = 1 - nuxy*nuyx - nuyz*nuzy - nuzx*nuxz - nuxy*nuyz*nuzx - nuyx*nuzy*nuxz
-#C = Matrix([[Ex*(1-nuyz*nuzy)/k,Ex*(nuyz*nuzx+nuyx)/k,Ex*(nuyx*nuzy+nuzx)/k,0,0,0],[Ey*(nuxz*nuzy+nuxy)/k,Ey*(1-nuxz*nuzx)/k,Ey*(nuxy*nuzx+nuzy),0,0,0],[Ez*(nuxy*nuyz+nuxz)/k,Ez*(nuxz*nuyx+nuyz)/k,Ez*(1-nuxy*nuyx)/k,0,0,0],[0,0,0,Gyz,0,0],[0,0,0,0,Gzx,0],[0,0,0,0,0,Gxy]])
-
-C = Matrix([[Ex/(1-(nuxy*nuyx)),(nuyx*Ex)/(1-(nuxy*nuyx)),0],[(nuyx*Ex)/(1-(nuxy*nuyx)),Ey/(1-(nuxy*nuyx)),0],[0,0,Gxy]]) 
+S = Matrix([[1/Ex,-nuxy/Ey,-nuxy/Ey,0,0,0],[-nuyx/Ex,1/Ey,-nuyz/Ey,0,0,0],[-nuyx/Ex,-nuyz/Ey,1/Ey,0,0,0],[0,0,0,2*(1+nuyz)/Ey,0,0],[0,0,0,0,1/Gxy,0],[0,0,0,0,0,1/Gxy]])
+C = S.inv()
 
 theta = symbols('theta')
 R = Matrix([[cos(theta),-sin(theta),0],[sin(theta),cos(theta),0],[0,0,1]])
 
-Cr = R * C * R.T
-
-C = Matrix([[Cr[0,0],Cr[0,1],C[0,1],0,0,Cr[0,2]],[Cr[1,0],Cr[1,1],C[0,1],0,0,Cr[1,2]],[C[1,0],C[1,0],C[1,1],0,0,0],[0,0,0,C[2,2],0,0],[0,0,0,0,C[2,2],0],[0,0,0,0,0,Cr[2,2]]])
+rot = R * C[[0,1,5],[0,1,5]] * R.T
+C[0,0] = rot[0,0]
+C[0,1] = rot[0,1]
+C[0,5] = rot[0,2]
+C[1,0] = rot[1,0]
+C[1,1] = rot[1,1]
+C[1,5] = rot[1,2]
+C[5,0] = rot[2,0]
+C[5,1] = rot[2,1]
+C[5,5] = rot[2,2]
 
 r, s, t = symbols('r s t')
 
