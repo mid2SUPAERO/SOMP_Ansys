@@ -16,7 +16,7 @@
   - `res_dir : pathlib.Path`: folder to store results. Individual job results can be stored in subfolders of it
   - `mod_dir : pathlib.Path`: folder with the .db file (geometry, mesh, constraints, loads)
 - `TopOpt.set_processors(np)`: sets number of processors for Ansys
-  - `np`: number of processors. If this function is not called, uses default configuration and runs in Shared Memory Parallel. If called, changes the number of procesors for Ansys and runs in Distributed Memory Parallel
+  - `np`: number of processors. If not called, runs on 2 processors
 
 ### Model files
 
@@ -28,7 +28,7 @@
 - `TopOpt2D(inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, rmin, penal, theta0, jobname)`
 - `TopOpt3D(inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, rmin, penal, theta0, jobname)`
   - `inputfile`: name of the model file (without .db)
-  - `Ex`, `Ey`, `nuxy`, `nuyz`, `Gxy`: material properties (considered transverse isotropic, symmetry plane $yz$
+  - `Ex`, `Ey`, `nuxy`, `nuyz`, `Gxy`: material properties (considered transverse isotropic, symmetry plane $yz$)
   - `volfrac`: volume fraction constraint for the optimization
   - `rmin`: radius of the filter (adjusts minimum feature size)
   - `theta0`: initial orientation of the fibers, in degrees

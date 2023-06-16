@@ -5,14 +5,14 @@ import time
 import numpy as np
 
 from python.optimization import TopOpt2D
-from python.postprocessor import PostProcessor
+from python.postprocessor import Post2D
 
 ANSYS_path = Path('mapdl')
 script_dir = Path('python/')
 res_dir    = Path('results/multi/')
 mod_dir    = Path('models/')
 TopOpt2D.load_paths(ANSYS_path, script_dir, res_dir, mod_dir)
-TopOpt2D.set_processors(4)
+TopOpt2D.set_processors(2)
 
 # fiber: bamboo
 rhofiber  = 700e-12 # t/mm^3
@@ -69,7 +69,7 @@ if rank == 0:
     print('Total elapsed time: {:.2f}s'.format(time.time()-t0))
     print('\ntheta0 comp   iter   time   CO2')
     for i in range(size):
-        print('{:7.1f} {:7.4f} {:7.0d} {:7.2f} {:7.2f}'.format(theta0[i],solvers[i].comp_hist[-1],solvers[i].mma.iter,solvers[i].time,footprints[i]))
+        print('{:7.1f} {:7.4f} {:7d} {:7.2f} {:7.2f}'.format(theta0[i],solvers[i].comp_hist[-1],solvers[i].mma.iter,solvers[i].time,footprints[i]))
 
     import os, glob
     for filename in glob.glob('cleanup*'): os.remove(filename)

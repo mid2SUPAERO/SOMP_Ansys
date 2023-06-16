@@ -28,8 +28,7 @@ TopOpt2D/TopOpt3D(inputfile, Ex, nu, volfrac, rmin, penal, theta0, jobname):
 
 Configure Ansys: Same configuration for all TopOpt objects
     load_paths(ANSYS_path, script_dir, res_dir, mod_dir): paths as pathlib.Path
-    set_processors(np): np - number of processors for Ansys
-        Runs on Shared Memory Parellel by default. If set_processors is called, will run on Distributed Memory Parallel
+    set_processors(np): np - number of processors for Ansys. If not called, runs on 2 processors
 
 Optimization function: optim()
 """
@@ -47,10 +46,8 @@ class TopOpt(ABC):
         TopOpt.mod_dir    = mod_dir
 
     np = 2
-    smp = True
     def set_processors(np):
         TopOpt.np = np
-        TopOpt.smp = False
     
     def __init__(self, inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, rmin, theta0, jobname=None):
         self.jobname = jobname
@@ -108,13 +105,11 @@ class TopOpt(ABC):
             f.write(open(TopOpt.script_dir/'ansys_solve.txt').read())
                   
         meshdata_cmd = [TopOpt.ANSYS_path, '-b', '-i', self.res_dir/'ansys_meshdata.txt', '-o', self.res_dir/'meshdata.out', '-smp']
-        result_cmd = [TopOpt.ANSYS_path, '-b', '-i', self.res_dir/'ansys_solve.txt', '-o', self.res_dir/'solve.out', '-np', str(TopOpt.np)]
+        result_cmd = [TopOpt.ANSYS_path, '-b', '-i', self.res_dir/'ansys_solve.txt', '-o', self.res_dir/'solve.out', '-np', str(TopOpt.np), '-smp']
 
         if not self.jobname is None:
             meshdata_cmd += ['-j', title]
             result_cmd += ['-j', title]
-            
-        if TopOpt.smp: result_cmd += ['-smp']
             
         return meshdata_cmd, result_cmd
 
