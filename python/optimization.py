@@ -30,6 +30,7 @@ Configure Ansys: Same configuration for all TopOpt objects
     load_paths(ANSYS_path, script_dir, res_dir, mod_dir): paths as pathlib.Path
     set_processors(np): np - number of processors for Ansys. If not called, runs on 2 processors
 
+Configure optimization: set_solid_elem(solid_elem): list of elements whose densities will be fixed on 1. Indexing starting at 0
 Optimization function: optim()
 """
 class TopOpt(ABC):
@@ -78,8 +79,9 @@ class TopOpt(ABC):
         self.sensitivity_filter = MeshIndependenceFilter(self.rmin, self.num_elem, self.centers)
         self.orientation_filter = OrientationRegularizationFilter(self.rmin, self.num_elem, self.centers)
 
-        self.max_iter = 200
-        self.rho_min  = 1e-3
+        self.max_iter   = 200
+        self.rho_min    = 1e-3
+        self.solid_elem = []
         
         self.optim_setup()
         self.rho_hist   = []
@@ -178,6 +180,10 @@ class TopOpt(ABC):
     def dconstraint(self, x):
         return np.concatenate((self.elemvol/self.volfrac/np.sum(self.elemvol),np.zeros(self.num_elem)))
     
+    def set_solid_elem(self, solid_elem):
+        self.solid_elem = solid_elem
+        self.x[solid_elem] = 1
+    
     def optim(self):
         t0 = time.time()
         for _ in range(self.max_iter):
@@ -190,6 +196,7 @@ class TopOpt(ABC):
             if convergence < 1e-3: break
 
             rho, theta = np.split(xnew,2)
+            rho[self.solid_elem] = 1
             theta = self.orientation_filter.filter(rho,theta)
             self.x = np.concatenate((rho,theta))
             

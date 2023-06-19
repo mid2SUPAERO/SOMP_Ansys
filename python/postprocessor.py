@@ -22,9 +22,9 @@ class PostProcessor(ABC):
         mass = rho * x.dot(self.solver.elemvol)
         return mass * (CO2mat + CO2veh)
     
-    def plot_convergence(self, compliance_unit='N.mm'):
+    def plot_convergence(self, start_iter=0, compliance_unit='N.mm'):
         plt.figure()
-        plt.plot(self.solver.comp_hist)
+        plt.plot(self.solver.comp_hist[start_iter:])
         plt.xlabel('Iteration')
         plt.ylabel(f'Compliance [{compliance_unit}]')
 

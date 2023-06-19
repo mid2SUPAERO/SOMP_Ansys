@@ -34,6 +34,8 @@
   - `theta0`: initial orientation of the fibers, in degrees
   - `jobname`: optional. Subfolder of `TopOpt.res_dir` to store results for this optim. Defaults to no subfolder, stores results directly on `TopOpt.res_dir`
 
+- `TopOpt.set_solid_elem(self, solid_elem)`: list of elements whose densities will be fixed on 1. Indexing starting at 0
+
 - `TopOpt.optim(self)`: runs the optimization and returns the density `rho` and the orientation `theta` of each element as separate `numpy.array`
 
 ### Class `PostProcessor`
@@ -44,5 +46,5 @@
   - `rho`: density
   - `CO2mat`: mass CO2 emmited per mass material (material production)
   - `CO2veh`: mass CO2 emitted per mass material during life (use in a vehicle) = mass fuel per mass transported per lifetime * service life * mass CO2 emmited per mass fuel
-- `plot_convergence(self, compliance_unit='N.mm')`: plots the convergence history
+- `plot_convergence(self, starting_iteration=0, compliance_unit='N.mm')`: plots the convergence history
 - `plot(self, iteration=-1, filename=None, save=True, fig=None, ax=None)`: plots the configuration (densities and orientations)
