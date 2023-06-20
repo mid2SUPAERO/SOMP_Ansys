@@ -1,13 +1,11 @@
 import numpy as np
 
-from abc import ABC, abstractmethod
-
 from matplotlib import cm, colors
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from functools import partial
 
-class PostProcessor(ABC):
+class PostProcessor():
     def __init__(self, solver):
         self.solver = solver
         
@@ -22,11 +20,11 @@ class PostProcessor(ABC):
         mass = rho * x.dot(self.solver.elemvol)
         return mass * (CO2mat + CO2veh)
     
-    def plot_convergence(self, start_iter=0, compliance_unit='N.mm'):
+    def plot_convergence(self, start_iter=0):
         plt.figure()
-        plt.plot(self.solver.comp_hist[start_iter:])
+        plt.plot(range(start_iter,len(self.solver.comp_hist)), self.solver.comp_hist[start_iter:])
         plt.xlabel('Iteration')
-        plt.ylabel(f'Compliance [{compliance_unit}]')
+        plt.ylabel('Compliance')
 
 class Post2D(PostProcessor):
     def plot(self, iteration=-1, filename=None, save=True, fig=None, ax=None):
@@ -196,7 +194,7 @@ class Post3D(PostProcessor):
         
     def make_grid_2d(self, layer, result, nodes):
         x, y = np.meshgrid(np.unique(self.solver.centers[:,0]),np.unique(self.solver.centers[:,1]))
-        z = np.unique(self.solver.centers[:,0])[layer]
+        z = np.unique(self.solver.centers[:,2])[layer]
         res = np.zeros_like(x)
         for e in range(self.solver.num_elem):
             if not self.solver.centers[e,2] == z: continue

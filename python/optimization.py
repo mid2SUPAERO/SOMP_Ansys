@@ -4,7 +4,7 @@ from abc import ABC
 
 import numpy as np
 
-from .filters import MeshIndependenceFilter, OrientationRegularizationFilter, GaussianFilter
+from .filters import DensityFilter, OrientationFilter
 from .mma import MMA
 
 # Starting point:
@@ -18,19 +18,24 @@ Required APDL script files:
 TopOpt2D: 4-node 2D quad, PLANE182 in a rectangular domain, with KEYOPT(3) = 3 plane stress with thk
 TopOpt3D: 8-node 3D hex, SOLID185 in a cuboid domain
 
-TopOpt2D/TopOpt3D(inputfile, Ex, nu, volfrac, rmin, penal, theta0, jobname):
+TopOpt2D/TopOpt3D(inputfile, Ex, nu, volfrac, rmin_d, rmin_o, penal, theta0, jobname, echo):
     inputfile: name of the model file (without .db)
     Ex, Ey, Gxy, nu: material properties
     volfrac: volume fraction constraint for the optimization
-    rmin: radius of the filter (adjusts minimum feature size)
+    rmin_d: radius of the density filter (adjusts minimum feature size)
+    rmin_o: radius of the orientation filter (adjusts fiber curvature)
     theta0: initial orientation of the fibers, in degrees
     jobname: subfolder of TopOpt.res_dir to store results for this optim. Defaults to no subfolder, stores results directly on TopOpt.res_dir
+    echo: print status at each iteration?
 
 Configure Ansys: Same configuration for all TopOpt objects
     load_paths(ANSYS_path, script_dir, res_dir, mod_dir): paths as pathlib.Path
     set_processors(np): np - number of processors for Ansys. If not called, runs on 2 processors
 
-Configure optimization: set_solid_elem(solid_elem): list of elements whose densities will be fixed on 1. Indexing starting at 0
+Configure optimization:
+    set_solid_elem(solid_elem): list of elements whose densities will be fixed on 1. Indexing starting at 0
+    set_optim_options(max_iter=200, move_rho=0.3, move_theta=5.)
+    
 Optimization function: optim()
 """
 class TopOpt(ABC):
@@ -50,13 +55,15 @@ class TopOpt(ABC):
     def set_processors(np):
         TopOpt.np = np
     
-    def __init__(self, inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, rmin, theta0, jobname=None):
+    def __init__(self, inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, theta0, jobname=None, echo=True):
         self.jobname = jobname
         if jobname is None:
             self.res_dir = TopOpt.res_dir
         else:
             self.res_dir = TopOpt.res_dir / jobname
         self.res_dir.mkdir(parents=True, exist_ok=True)
+        
+        self.echo = echo
         
         self.meshdata_cmd, self.result_cmd = self.build_apdl_scripts(inputfile)
         subprocess.call(self.meshdata_cmd)
@@ -72,18 +79,17 @@ class TopOpt(ABC):
         self.theta0 = np.deg2rad(theta0)
         
         self.volfrac = volfrac
-        self.rmin    = rmin
+        self.r_rho   = r_rho
+        self.r_theta = r_theta
         self.penal   = 3
-        self.move    = np.concatenate((0.4*np.ones(self.num_elem),15./360*np.ones(self.num_elem)))
         
-        self.sensitivity_filter = MeshIndependenceFilter(self.rmin, self.num_elem, self.centers)
-        self.orientation_filter = OrientationRegularizationFilter(self.rmin, self.num_elem, self.centers)
+        self.density_filter     = DensityFilter(self.r_rho, self.num_elem, self.centers)
+        self.orientation_filter = OrientationFilter(self.r_theta, self.num_elem, self.centers)
 
-        self.max_iter   = 200
         self.rho_min    = 1e-3
         self.solid_elem = []
         
-        self.optim_setup()
+        self.set_optim_options()
         self.rho_hist   = []
         self.theta_hist = []
         self.comp_hist  = []
@@ -132,8 +138,10 @@ class TopOpt(ABC):
         self.x = np.concatenate((rho,theta))
 
         xmin = np.concatenate((self.rho_min*np.ones_like(rho), -np.pi*np.ones_like(theta)))
-        xmax = np.concatenate((np.ones_like(rho), np.pi*np.ones_like(theta)))    
-        self.mma = MMA(self.fea,self.sensitivities,self.constraint,self.dconstraint,xmin,xmax,self.move)
+        xmax = np.concatenate((np.ones_like(rho), np.pi*np.ones_like(theta)))
+        move = np.concatenate((self.move_rho*np.ones(self.num_elem),self.move_theta*np.ones(self.num_elem)))
+        
+        self.mma = MMA(self.fea,self.sensitivities,self.constraint,self.dconstraint,xmin,xmax,move)
     
     def fea(self, x):
         rho, theta = np.split(x,2)
@@ -169,7 +177,7 @@ class TopOpt(ABC):
         energy = np.loadtxt(self.res_dir/'strain_energy.txt', dtype=float) # strain_energy
         uku = 2*energy/rho**self.penal # K: stiffness matrix with rho=1
         dcdrho = -self.penal * rho**(self.penal-1) * uku
-        dcdrho = self.sensitivity_filter.filter(rho, dcdrho)
+        dcdrho = self.density_filter.filter(rho, dcdrho)
         return dcdrho
     
     # sum(rho.v)/(volfrac.V) - 1 <= 0
@@ -183,17 +191,23 @@ class TopOpt(ABC):
     def set_solid_elem(self, solid_elem):
         self.solid_elem = solid_elem
         self.x[solid_elem] = 1
+        
+    def set_optim_options(self, max_iter=200, move_rho=0.3, move_theta=5.):
+        self.max_iter   = max_iter
+        self.move_rho   = move_rho
+        self.move_theta = move_theta/360.
+        
+        self.optim_setup()
     
     def optim(self):
         t0 = time.time()
         for _ in range(self.max_iter):
-            print("Starting iteration {:3d}...".format(self.mma.iter+1), end=' ')
+            if self.echo: print("Starting iteration {:3d}...".format(self.mma.iter+1), end=' ')
             xnew = self.mma.iterate(self.x)
-            print("compliance = {:.4f}".format(self.comp_hist[-1]))
+            if self.echo: print("compliance = {:.4f}".format(self.comp_hist[-1]))
             
-            # Relative variation of the compliance moving average
-            convergence = np.abs((sum(self.comp_hist[-5:])-sum(self.comp_hist[-10:-5]))/sum(self.comp_hist[-10:-5])) if self.mma.iter > 9 else 1
-            if convergence < 1e-3: break
+            # convergence = np.abs(self.comp_hist[-1]-self.comp_hist[-2])/self.comp_hist[-2] if self.mma.iter > 1 else 1
+            # if convergence < 1e-4: break
 
             rho, theta = np.split(xnew,2)
             rho[self.solid_elem] = 1
@@ -220,7 +234,7 @@ class TopOpt2D(TopOpt):
             
             dcdt[i] = -rho[i]**self.penal * ue.dot(dkdt.dot(ue))
             
-        # dcdt = self.sensitivity_filter.filter(rho, dcdt)
+        dcdt = self.orientation_filter.filter(rho, dcdt)
         
         return dcdt
     
@@ -238,6 +252,6 @@ class TopOpt3D(TopOpt):
             
             dcdt[i] = -rho[i]**self.penal * ue.dot(dkdt.dot(ue))
             
-        # dcdt = self.sensitivity_filter.filter(rho, dcdt)
+        dcdt = self.orientation_filter.filter(rho, dcdt)
 
         return dcdt

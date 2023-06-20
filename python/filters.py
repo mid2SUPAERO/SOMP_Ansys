@@ -41,22 +41,19 @@ class ConvolutionFilter():
                 eiH = np.maximum(0,rmin - ConvolutionFilter.distances(centers[ei],centers[neighbors]))
                 sH[cc:cc+len(neighbors)] = eiH / np.sum(eiH)
                 cc += len(neighbors)
-            H = coo_matrix((sH,(iH,jH)),shape=(num_elem,num_elem))
+            H = coo_matrix((sH,(iH,jH)),shape=(num_elem,num_elem)).tocsr()
         except:
             H = np.identity(num_elem)
             print('\n***   Insufficient memory or small limitElementNumber    ***\n')
         return H
     
-class MeshIndependenceFilter(ConvolutionFilter):
+class DensityFilter(ConvolutionFilter):
     def filter(self, rho, dc):
         return self.H.dot(rho*dc)/rho
 
-class OrientationRegularizationFilter(ConvolutionFilter):
-    def __init__(self, rmin, num_elem, centers):
-        super().__init__(rmin,num_elem,centers)
-        self.H = self.H.tocsr()
-        
+class OrientationFilter(ConvolutionFilter):      
     def filter(self, rho, theta):
+        # ignore element in filter if density is near to blank
         # multiply each column by the correspondent rho
         a = diags(rho)
         H = self.H @ a
@@ -65,34 +62,4 @@ class OrientationRegularizationFilter(ConvolutionFilter):
         a = diags(1/H.sum(axis=1).A.ravel())
         H = a @ H 
         
-        # theta_i hat = -theta_i if theta_e.theta_i <= 0 else theta_i 
-        sign = np.sign(np.outer(theta,theta))
-        sign[np.where(sign==0)] = -1
-        H = H.multiply(sign)
-        
         return H.dot(theta)
-    
-class GaussianFilter():   
-    def __init__(self, num_elem, centers):
-        self.num_elem = num_elem
-        self.centers = centers
-        self.x, self.y = np.meshgrid(np.unique(centers[:,0]),np.unique(centers[:,1]))
-        
-        # Matrix i,j correspondence for each element
-        self.e = range(num_elem)
-        self.i = []
-        self.j = []
-        for e in self.e:
-            self.i.append(np.where(self.x[0,:] == self.centers[e,0])[0][0])
-            self.j.append(np.where(self.y[:,0] == self.centers[e,1])[0][0])
-        
-    def filter(self, theta):
-        theta_grid = np.zeros_like(self.x)
-        theta_grid[self.j,self.i] = theta[self.e]
-        
-        theta_grid = gaussian_filter(theta_grid, sigma=3)
-        
-        thetanew = np.zeros_like(theta)
-        thetanew[self.e] = theta_grid[self.j,self.i]
-            
-        return thetanew

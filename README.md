@@ -25,16 +25,23 @@
 
 ### Class `TopOpt`
 
-- `TopOpt2D(inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, rmin, penal, theta0, jobname)`
-- `TopOpt3D(inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, rmin, penal, theta0, jobname)`
+- `TopOpt2D(inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, penal, theta0, jobname, echo)`
+- `TopOpt3D(inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, penal, theta0, jobname, echo)`
   - `inputfile`: name of the model file (without .db)
   - `Ex`, `Ey`, `nuxy`, `nuyz`, `Gxy`: material properties (considered transverse isotropic, symmetry plane $yz$)
   - `volfrac`: volume fraction constraint for the optimization
-  - `rmin`: radius of the filter (adjusts minimum feature size)
+  - `r_rho`: radius of the density filter (adjusts minimum feature size)
+  - `r_theta`: radius of the orientation filter (adjusts fiber curvature)
   - `theta0`: initial orientation of the fibers, in degrees
   - `jobname`: optional. Subfolder of `TopOpt.res_dir` to store results for this optim. Defaults to no subfolder, stores results directly on `TopOpt.res_dir`
+  - `echo`: boolean. Print compliance at each iteration?
 
 - `TopOpt.set_solid_elem(self, solid_elem)`: list of elements whose densities will be fixed on 1. Indexing starting at 0
+
+- `TopOpt.set_optim_options(self, max_iter=200, move_rho=0.3, move_theta=5.)`
+  - `max_iter`: maximum number of iterations
+  - `move_rho`: move limit for density variables at each iteration
+  - `move_theta`: move limit for orientation variables at each iteration in degrees
 
 - `TopOpt.optim(self)`: runs the optimization and returns the density `rho` and the orientation `theta` of each element as separate `numpy.array`
 
@@ -46,5 +53,6 @@
   - `rho`: density
   - `CO2mat`: mass CO2 emmited per mass material (material production)
   - `CO2veh`: mass CO2 emitted per mass material during life (use in a vehicle) = mass fuel per mass transported per lifetime * service life * mass CO2 emmited per mass fuel
-- `plot_convergence(self, starting_iteration=0, compliance_unit='N.mm')`: plots the convergence history
+- `plot_convergence(self, starting_iteration=0)`: plots the convergence history
 - `plot(self, iteration=-1, filename=None, save=True, fig=None, ax=None)`: plots the configuration (densities and orientations)
+- `plot_layer(self, iteration=-1, layer=0, filename=None, save=True, fig=None, ax=None)`: only for 3D. Plots layer `layer` as a 2D plot, easier to visualise
