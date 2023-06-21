@@ -1,6 +1,5 @@
 import numpy as np
 from scipy.sparse import coo_matrix, diags
-from scipy.ndimage import gaussian_filter
 
 """
 Weights: max{0, rmin-distance(i,j)}
@@ -53,6 +52,8 @@ class DensityFilter(ConvolutionFilter):
 
 class OrientationFilter(ConvolutionFilter):      
     def filter(self, rho, theta):
+        cost, sint = np.cos(theta), np.sin(theta)
+
         # ignore element in filter if density is near to blank
         # multiply each column by the correspondent rho
         a = diags(rho)
@@ -60,6 +61,9 @@ class OrientationFilter(ConvolutionFilter):
         
         # divide each line by its sum (renormalize weights)
         a = diags(1/H.sum(axis=1).A.ravel())
-        H = a @ H 
+        H = a @ H
+
+        cost = H.dot(cost)
+        sint = H.dot(sint)
         
-        return H.dot(theta)
+        return np.arctan2(sint,cost)
