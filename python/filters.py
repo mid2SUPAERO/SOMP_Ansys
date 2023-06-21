@@ -52,8 +52,6 @@ class DensityFilter(ConvolutionFilter):
 
 class OrientationFilter(ConvolutionFilter):      
     def filter(self, rho, theta):
-        cost, sint = np.cos(theta), np.sin(theta)
-
         # ignore element in filter if density is near to blank
         # multiply each column by the correspondent rho
         a = diags(rho)
@@ -63,7 +61,14 @@ class OrientationFilter(ConvolutionFilter):
         a = diags(1/H.sum(axis=1).A.ravel())
         H = a @ H
 
-        cost = H.dot(cost)
-        sint = H.dot(sint)
+        cos2t, sin2t = np.cos(2*theta), np.sin(2*theta)
+        cos2t, sin2t = H.dot(cos2t), H.dot(sin2t)
         
-        return np.arctan2(sint,cost)
+        theta_f = np.zeros_like(theta)
+        theta_f[np.where(cos2t>0)[0]]               = 0.5 * np.arctan2(sin2t,cos2t)[np.where(cos2t>0)[0]]
+        theta_f[np.where(cos2t==0 and sin2t>=0)[0]] = np.pi/4
+        theta_f[np.where(cos2t==0 and sin2t<0)[0]]  = -np.pi/4
+        theta_f[np.where(cos2t<0 and sin2t>=0)[0]]  = 0.5 * np.arctan2(sin2t,cos2t)[np.where(cos2t<0 and sin2t>=0)[0]] + np.pi/2
+        theta_f[np.where(cos2t<0 and sin2t<0)[0]]   = 0.5 * np.arctan2(sin2t,cos2t)[np.where(cos2t<0 and sin2t<0)[0]] - np.pi/2
+        
+        return theta_f
