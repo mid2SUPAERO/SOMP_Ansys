@@ -60,13 +60,5 @@ class OrientationFilter(ConvolutionFilter):
         # divide each line by its sum (renormalize weights)
         a = diags(1/H.sum(axis=1).A.ravel())
         H = a @ H
-
-        cos2t, sin2t = H.dot(np.cos(2*theta)), H.dot(np.sin(2*theta))
         
-        theta_f = 0.5 * np.arctan2(sin2t,cos2t)
-        theta_f = np.where(np.logical_and(cos2t==0,sin2t>=0), np.pi/4, theta_f)
-        theta_f = np.where(np.logical_and(cos2t==0,sin2t<0), -np.pi/4, theta_f)
-        theta_f = np.where(np.logical_and(cos2t<0,sin2t>=0), theta_f + np.pi/2, theta_f)
-        theta_f = np.where(np.logical_and(cos2t<0,sin2t<0), theta_f - np.pi/2, theta_f)
-        
-        return theta_f
+        return H.dot(theta)

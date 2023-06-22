@@ -244,7 +244,7 @@ class TopOpt3D(TopOpt):
         dcdt = np.zeros(self.num_elem)
         for i in range(self.num_elem):
             from .dkdt3d import dkdt3d
-            dkdt = dkdt3d(self.Ex,self.Ey,self.nuxy,self.nuyz,theta[i],self.elemvol[i])
+            dkdt = dkdt3d(self.Ex,self.Ey,self.nuxy,self.nuyz,self.Gxy,theta[i],self.elemvol[i])
             
             nodes = self.elmnodes[i,:]
             ue = [u[nodes[0],0], u[nodes[0],1], u[nodes[0],2], u[nodes[1],0], u[nodes[1],1], u[nodes[1],2], u[nodes[2],0], u[nodes[2],1], u[nodes[2],2], u[nodes[3],0], u[nodes[3],1], u[nodes[3],2], u[nodes[4],0], u[nodes[4],1], u[nodes[4],2], u[nodes[5],0], u[nodes[5],1], u[nodes[5],2], u[nodes[6],0], u[nodes[6],1], u[nodes[6],2], u[nodes[7],0], u[nodes[7],1], u[nodes[7],2]]
