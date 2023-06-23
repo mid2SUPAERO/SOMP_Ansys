@@ -78,8 +78,8 @@ class Post2D(PostProcessor):
         x, y = np.meshgrid(np.unique(self.solver.centers[:,0]),np.unique(self.solver.centers[:,1]))
         z = np.zeros_like(x)
         for e in range(self.solver.num_elem):
-            i = (x[0,:] == self.solver.centers[e,0])[0]
-            j = (y[:,0] == self.solver.centers[e,1])[0]
+            i = np.where(x[0,:] == self.solver.centers[e,0])[0][0]
+            j = np.where(y[:,0] == self.solver.centers[e,1])[0][0]
             z[j,i] = result[e]
         
         if nodes:
@@ -216,9 +216,9 @@ class Post3D(PostProcessor):
         length = 0.9*(z[0,0,0]-z[0,0,1])
         res = np.zeros_like(x)
         for e in range(self.solver.num_elem):
-            i = (x[0,:,0] == self.solver.centers[e,0])[0]
-            j = (y[:,0,0] == self.solver.centers[e,1])[0]
-            k = (z[0,0,:] == self.solver.centers[e,2])[0]
+            i = np.where(x[0,:,0] == self.solver.centers[e,0])[0][0]
+            j = np.where(y[:,0,0] == self.solver.centers[e,1])[0][0]
+            k = np.where(z[0,0,:] == self.solver.centers[e,2])[0][0]
             res[j,i,k] = result[e]
 
         return x, y, z, res, length
