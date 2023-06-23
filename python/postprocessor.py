@@ -20,11 +20,15 @@ class PostProcessor():
         mass = rho * x.dot(self.solver.elemvol)
         return mass * (CO2mat + CO2veh)
     
-    def plot_convergence(self, start_iter=0):
+    def plot_convergence(self, start_iter=0, filename=None, save=True):
         plt.figure()
         plt.plot(range(start_iter,len(self.solver.comp_hist)), self.solver.comp_hist[start_iter:])
         plt.xlabel('Iteration')
         plt.ylabel('Compliance')
+        
+        if save:
+            if filename is None: filename = self.solver.res_dir / 'convergence.png'
+            plt.savefig(filename)
 
 class Post2D(PostProcessor):
     def plot(self, iteration=-1, filename=None, save=True, fig=None, ax=None):
@@ -74,8 +78,8 @@ class Post2D(PostProcessor):
         x, y = np.meshgrid(np.unique(self.solver.centers[:,0]),np.unique(self.solver.centers[:,1]))
         z = np.zeros_like(x)
         for e in range(self.solver.num_elem):
-            i = np.where(x[0,:] == self.solver.centers[e,0])[0][0]
-            j = np.where(y[:,0] == self.solver.centers[e,1])[0][0]
+            i = (x[0,:] == self.solver.centers[e,0])[0]
+            j = (y[:,0] == self.solver.centers[e,1])[0]
             z[j,i] = result[e]
         
         if nodes:
@@ -198,8 +202,8 @@ class Post3D(PostProcessor):
         res = np.zeros_like(x)
         for e in range(self.solver.num_elem):
             if not self.solver.centers[e,2] == z: continue
-            i = np.where(x[0,:] == self.solver.centers[e,0])[0][0]
-            j = np.where(y[:,0] == self.solver.centers[e,1])[0][0]
+            i = (x[0,:] == self.solver.centers[e,0])[0]
+            j = (y[:,0] == self.solver.centers[e,1])[0]
             res[j,i] = result[e]
         
         if nodes:
@@ -212,9 +216,9 @@ class Post3D(PostProcessor):
         length = 0.9*(z[0,0,0]-z[0,0,1])
         res = np.zeros_like(x)
         for e in range(self.solver.num_elem):
-            i = np.where(x[0,:,0] == self.solver.centers[e,0])[0][0]
-            j = np.where(y[:,0,0] == self.solver.centers[e,1])[0][0]
-            k = np.where(z[0,0,:] == self.solver.centers[e,2])[0][0]
+            i = (x[0,:,0] == self.solver.centers[e,0])[0]
+            j = (y[:,0,0] == self.solver.centers[e,1])[0]
+            k = (z[0,0,:] == self.solver.centers[e,2])[0]
             res[j,i,k] = result[e]
 
         return x, y, z, res, length
