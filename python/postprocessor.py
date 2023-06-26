@@ -202,15 +202,15 @@ class Post3D(PostProcessor):
         res = np.zeros_like(x)
         for e in range(self.solver.num_elem):
             if not self.solver.centers[e,2] == z: continue
-            i = (x[0,:] == self.solver.centers[e,0])[0]
-            j = (y[:,0] == self.solver.centers[e,1])[0]
+            i = np.where(x[0,:] == self.solver.centers[e,0])[0][0]
+            j = np.where(y[:,0] == self.solver.centers[e,1])[0][0]
             res[j,i] = result[e]
         
         if nodes:
             x, y = np.meshgrid(np.unique(self.solver.node_coord[:,0]),np.unique(self.solver.node_coord[:,1]))
             
         return x, y, res
-        
+
     def make_grid_3d(self, result):
         x, y, z = np.meshgrid(np.unique(self.solver.centers[:,0]),np.unique(self.solver.centers[:,1]),np.unique(self.solver.centers[:,2]))
         length = 0.9*(z[0,0,0]-z[0,0,1])

@@ -10,8 +10,7 @@ import time
 MMA(fobj, dfobj, const, dconst, xmin, xmax, move):
     fobj: callable (x: np.array) -> objective function value
     dfboj: callable (x: np.array) -> objective function sensitivities: np.array
-    const: callable (x: np.array) -> constraint function value
-        constraint <= 0
+    const: callable (x: np.array) -> constraint function value: const(x) <= 0
     dconst: callable (x: np.array) -> derivatives of constraint function: np.array
     xmin: minimum value for each design variable: np.array
     xmax: maximum value for each design variable: np.array
@@ -38,8 +37,9 @@ class MMA():
         self.c = 10000*np.ones((self.m,1))
         self.d = np.zeros((self.m,1))
 
-        self.fea_time  = 0
-        self.iter_time = 0
+        self.fea_time   = 0
+        self.deriv_time = 0
+        self.iter_time  = 0
 
     def iterate(self, x):
         if self.iter == 0:
@@ -56,17 +56,21 @@ class MMA():
 
         t0 = time.time()
         f0val = self.fobj(x)
+        self.fea_time += time.time()-t0
+        
+        t0 = time.time()
         df0dx = self.dfobj(x)[np.newaxis].T
+        self.deriv_time += time.time()-t0
+        
         fval = np.array([[self.const(x)]])
         dfdx = self.dconst(x)[np.newaxis]
-        self.fea_time += time.time()-t0
 
         t0 = time.time()
         xmma,ymma,zmma,lam,xsi,eta,mu,zet,s,self.low,self.upp = MMA.mmasub(self.m,self.n,self.iter,xval,self.xmin,self.xmax,
             xold1,xold2,f0val,df0dx,fval,dfdx,self.low,self.upp,self.a0,self.a,self.c,self.d,self.move)
         self.iter_time += time.time()-t0
         
-        self.iter = self.iter + 1
+        self.iter += 1
         self.xold2 = self.xold1.copy()
         self.xold1 = x.copy()
 

@@ -7,6 +7,9 @@ import numpy as np
 from .filters import DensityFilter, OrientationFilter
 from .mma import MMA
 
+from .dkdt2d import dkdt2d
+from .dkdt3d import dkdt3d
+
 # Starting point:
 # https://github.com/pep-pig/Topology-optimization-of-structure-via-simp-method
 """
@@ -66,7 +69,7 @@ class TopOpt(ABC):
         self.echo = echo
         
         self.meshdata_cmd, self.result_cmd = self.build_apdl_scripts(inputfile)
-        subprocess.call(self.meshdata_cmd)
+        subprocess.run(self.meshdata_cmd)
         
         self.num_elem, self.num_node = self.count_mesh()
         self.centers, self.elemvol, self.elmnodes, self.node_coord = self.get_mesh_data()
@@ -157,7 +160,7 @@ class TopOpt(ABC):
         np.savetxt(self.res_dir/'material.txt', material, fmt=' %-.7E', newline='\n')
         
         # Solve
-        subprocess.call(self.result_cmd)
+        subprocess.run(self.result_cmd)
         energy = np.loadtxt(self.res_dir/'strain_energy.txt', dtype=float) # strain_energy
         c = 2*np.sum(energy)
 
@@ -225,7 +228,6 @@ class TopOpt2D(TopOpt):
         u = np.loadtxt(self.res_dir/'nodal_solution_u.txt', dtype=float) # ux uy uz
         dcdt = np.zeros(self.num_elem)
         for i in range(self.num_elem):
-            from .dkdt2d import dkdt2d
             dkdt = dkdt2d(self.Ex,self.Ey,self.nuxy,theta[i],self.elemvol[i])
             
             nodes = self.elmnodes[i,:]
@@ -238,20 +240,19 @@ class TopOpt2D(TopOpt):
         
         return dcdt
     
-class TopOpt3D(TopOpt):
+class TopOpt3D(TopOpt): 
     def dcdt(self, rho, theta):
         u = np.loadtxt(self.res_dir/'nodal_solution_u.txt', dtype=float) # ux uy uz
         dcdt = np.zeros(self.num_elem)
         for i in range(self.num_elem):
-            from .dkdt3d import dkdt3d
             dkdt = dkdt3d(self.Ex,self.Ey,self.nuxy,self.nuyz,self.Gxy,theta[i],self.elemvol[i])
-            
+
             nodes = self.elmnodes[i,:]
             ue = [u[nodes[0],0], u[nodes[0],1], u[nodes[0],2], u[nodes[1],0], u[nodes[1],1], u[nodes[1],2], u[nodes[2],0], u[nodes[2],1], u[nodes[2],2], u[nodes[3],0], u[nodes[3],1], u[nodes[3],2], u[nodes[4],0], u[nodes[4],1], u[nodes[4],2], u[nodes[5],0], u[nodes[5],1], u[nodes[5],2], u[nodes[6],0], u[nodes[6],1], u[nodes[6],2], u[nodes[7],0], u[nodes[7],1], u[nodes[7],2]]
             ue = np.array(ue)
             
             dcdt[i] = -rho[i]**self.penal * ue.dot(dkdt.dot(ue))
-            
+
         dcdt = self.orientation_filter.filter(rho, dcdt)
 
         return dcdt

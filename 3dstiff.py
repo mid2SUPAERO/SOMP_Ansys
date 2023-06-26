@@ -1,6 +1,6 @@
 from sympy import *
 
-V = symbols('V')
+# Assumes the element is a cube: multiplies the final matrix by the volume instead of multiplying each dimension by its size
 
 # Transverse isotropy, symmetry planne yz
 # Constants: Ex, Ey, nuxy, nuyz, Gxy
@@ -24,7 +24,7 @@ T = Matrix([[R[0,0]**2, R[0,1]**2, R[0,2]**2, 2*R[0,1]*R[0,2], 2*R[0,0]*R[0,2], 
     [R[2,0]*R[1,0], R[2,1]*R[1,1], R[2,2]*R[1,2], R[2,1]*R[1,2]+R[2,2]*R[1,1], R[2,0]*R[1,2]+R[2,2]*R[1,0], R[2,0]*R[1,1]+R[2,1]*R[1,0]],
     [R[2,0]*R[0,0], R[2,1]*R[0,1], R[2,2]*R[0,2], R[2,1]*R[0,2]+R[2,2]*R[0,1], R[2,0]*R[0,2]+R[2,2]*R[0,0], R[2,0]*R[0,1]+R[2,1]*R[0,0]],
     [R[1,0]*R[0,0], R[1,1]*R[0,1], R[1,2]*R[0,2], R[1,1]*R[0,2]+R[1,2]*R[0,1], R[1,0]*R[0,2]+R[1,2]*R[0,0], R[1,0]*R[0,1]+R[1,1]*R[0,0]]])
-C = T * C * T.T
+Cr = T * C * T.T
 
 r, s, t = symbols('r s t')
 
@@ -48,10 +48,39 @@ B8 = Matrix([[diff(h,r), 0, 0], [0, diff(h,s), 0], [0, 0, diff(h,t)], [0, diff(h
 
 B = Matrix([[B1, B2, B3, B4, B5, B6, B7, B8]])
 
-BC = V * B.T * C * B
-K = integrate(integrate(integrate(BC, (r,-1,1)), (s,-1,1)), (t,-1,1))
-dK = diff(K,theta)
+BCB = B.T * Cr * B
+dBCB = diff(BCB,theta)
+dK = integrate(integrate(integrate(dBCB, (r,-1,1)), (s,-1,1)), (t,-1,1))
 
-code = printing.pycode(dK)
-with open('sensitivity.txt','w') as f:
-    f.write(code)
+# function code with some hand optimizations to save operations and execute faster
+with open('dkdt3d.py','w') as f:
+    f.write('import numpy as np\n')
+    f.write('def dkdt3d(Ex,Ey,nuxy,nuyz,Gxy,T,V):\n')
+    f.write('    c = np.cos(T)\n')
+    f.write('    s = np.sin(T)\n')
+    f.write('    delta = 1.0*Ex*nuyz**2 - 1.0*Ex + 2.0*Ey*nuxy**2*nuyz + 2.0*Ey*nuxy**2\n')
+    f.write('    dkdt = np.zeros((24,24))\n')
+    for i in range(24):
+        for j in range(i,24):
+            line = printing.pycode(dK[i,j]).replace('math.cos(theta)','c').replace('math.sin(theta)','s')
+            line = line.replace('(1.0*Ex*nuyz**2 - 1.0*Ex + 2.0*Ey*nuxy**2*nuyz + 2.0*Ey*nuxy**2)','delta')
+            
+            # searches if expression was already calculated in previous terms
+            found = False
+            for k in range(i+1):
+                if found: break
+                for l in range(k,24):
+                    if (i,j) == (k,l): break
+                    if dK[i,j] == dK[k,l]:
+                        line = f'dkdt[{k}][{l}]'
+                        found = True
+                        break
+                    if dK[i,j] == -dK[k,l]:
+                        line = f'-dkdt[{k}][{l}]'
+                        found = True
+                        break
+
+            f.write(f"    dkdt[{i}][{j}] = {line}\n")
+    f.write('    dkdt = dkdt + dkdt.T - np.diag(dkdt.diagonal())\n')
+    f.write('    dkdt *= V\n')
+    f.write('    return dkdt')
