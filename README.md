@@ -53,3 +53,7 @@
 - `plot_convergence(self, starting_iteration=0)`: plots the convergence history
 - `plot(self, iteration=-1, filename=None, save=True, fig=None, ax=None)`: plots the configuration (densities and orientations)
 - `plot_layer(self, iteration=-1, layer=0, filename=None, save=True, fig=None, ax=None)`: only for 3D. Plots layer `layer` as a 2D plot, easier to visualise
+
+
+### Dependencies
+Please give dependencies
