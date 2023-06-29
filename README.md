@@ -2,9 +2,11 @@
 
 ## Auxiliar files
 
-- `3dstiff.py`: symbolic calculation to determine the expression for $\frac{\partial c}{\partial \theta}$, base to `python/dkdt3d.py`. Not used in the optimization
+- `2dstiff.py`: symbolic calculation to determine the expression for $\frac{\partial c}{\partial \theta}$, writes `python/dkdt2d.py`. Not used in the optimization
+- `3dstiff.py`: symbolic calculation to determine the expression for $\frac{\partial c}{\partial \theta}$, writes `python/dkdt3d.py`. Not used in the optimization
 - `SimpleExample.ipynb`: Jupyter notebook with an example of 2D and 3D optimizations
-- `global2d.py`: example of a complete 2D optimization. Uses MPI to launch parallel processes with different initial orientations
+- `bridge.py`: example of a complete 2D optimization. Uses MPI to launch parallel processes with different initial orientations
+- `global3d.py`: example of a complete 3D optimization. Uses MPI to launch parallel processes with different initial orientations and volume fraction constraints
 
 ## Usage 
 
@@ -15,8 +17,6 @@
   - `script_dir : pathlib.Path`: folder with .py files and .txt APDL scripts
   - `res_dir : pathlib.Path`: folder to store results. Individual job results can be stored in subfolders of it
   - `mod_dir : pathlib.Path`: folder with the .db file (geometry, mesh, constraints, loads)
-- `TopOpt.set_processors(np)`: sets number of processors for Ansys
-  - `np`: number of processors. If not called, runs on 2 processors
 
 ### Model files
 
@@ -25,30 +25,27 @@
 
 ### Class `TopOpt`
 
-- `TopOpt2D(inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, penal, theta0, jobname, echo)`
-- `TopOpt3D(inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, penal, theta0, jobname, echo)`
+- `TopOpt(inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, theta0, max_iter, move_rho, move_theta, dim, jobname, echo)`
   - `inputfile`: name of the model file (without .db)
   - `Ex`, `Ey`, `nuxy`, `nuyz`, `Gxy`: material properties (considered transverse isotropic, symmetry plane $yz$)
   - `volfrac`: volume fraction constraint for the optimization
   - `r_rho`: radius of the density filter (adjusts minimum feature size)
   - `r_theta`: radius of the orientation filter (adjusts fiber curvature)
+  - `max_iter`: number of iterations
+  - `move_rho`: move limit for densities
+  - `move_theta`: move limit for orientations, in degrees
   - `theta0`: initial orientation of the fibers, in degrees
+  - `dim`: optimization type, `'2D'` or `'3D'`
   - `jobname`: optional. Subfolder of `TopOpt.res_dir` to store results for this optim. Defaults to no subfolder, stores results directly on `TopOpt.res_dir`
   - `echo`: boolean. Print compliance at each iteration?
 
 - `TopOpt.set_solid_elem(self, solid_elem)`: list of elements whose densities will be fixed on 1. Indexing starting at 0
 
-- `TopOpt.set_optim_options(self, max_iter=200, move_rho=0.3, move_theta=5.)`
-  - `max_iter`: maximum number of iterations
-  - `move_rho`: move limit for density variables at each iteration
-  - `move_theta`: move limit for orientation variables at each iteration in degrees
-
 - `TopOpt.optim(self)`: runs the optimization and returns the density `rho` and the orientation `theta` of each element as separate `numpy.array`
 
 ### Class `PostProcessor`
 
-- `Post2D(solver)`: `solver : TopOpt2D`
-- `Post3D(solver)`: `solver : TopOpt3D`
+- `Post2D(solver)`, `Post3D(solver)`
 - `CO2_footprint(self, rho, CO2mat, CO2veh)`: returns the CO2 footprint for the final design
   - `rho`: density
   - `CO2mat`: mass CO2 emmited per mass material (material production)

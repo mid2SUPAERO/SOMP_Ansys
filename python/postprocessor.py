@@ -90,7 +90,7 @@ class Post2D(PostProcessor):
 class Post3D(PostProcessor):
     def plot(self, iteration=-1, filename=None, save=True, fig=None, ax=None):
         data = self.solver.rho_hist[iteration]
-        threshold = 0.5
+        threshold = 0.3
 
         if ax is None:
             fig = plt.figure(dpi=500)

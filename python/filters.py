@@ -5,7 +5,8 @@ from scipy.sparse import coo_matrix, diags
 Weights: max{0, rmin-distance(i,j)}
 """
 class ConvolutionFilter():
-    def __init__(self, rmin, num_elem, centers):
+    def __init__(self, rmin, centers):
+        num_elem = centers.shape[0]
         self.H = ConvolutionFilter.preFlt(rmin, num_elem, centers)
         
     def distances(matrixA, matrixB):
@@ -50,7 +51,7 @@ class DensityFilter(ConvolutionFilter):
     def filter(self, rho, dc):
         return self.H.dot(rho*dc)/rho
 
-class OrientationFilter(ConvolutionFilter):      
+class OrientationFilter(ConvolutionFilter):    
     def filter(self, rho, theta):
         # ignore element in filter if density is near to blank
         # multiply each column by the correspondent rho

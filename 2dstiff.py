@@ -7,11 +7,12 @@ S = Matrix([[1/Ex,-nuxy/Ey,0],[-nuyx/Ex,1/Ey,0],[0,0,1/Gxy]])
 C = S.inv()
 
 theta = symbols('theta')
-R = Matrix([[cos(theta),-sin(theta),0],[sin(theta),cos(theta),0],[0,0,1]])
-Cr = R * C * R.T
+T = Matrix([[cos(theta)**2, sin(theta)**2, -2*cos(theta)*sin(theta)],
+            [sin(theta)**2, cos(theta)**2, 2*cos(theta)*sin(theta)],
+            [cos(theta)*sin(theta), -cos(theta)*sin(theta), cos(theta)**2-sin(theta)**2]])
+Cr = T * C * T.T
 
 r, s = symbols('r s')
-
 a = 1/4 * (1-r) * (1-s)
 b = 1/4 * (1+r) * (1-s)
 c = 1/4 * (1+r) * (1+s)
@@ -31,7 +32,7 @@ dK = integrate(integrate(dBCB, (r,-1,1)), (s,-1,1))
 # function code with some hand optimizations to save operations and execute faster
 with open('dkdt2d.py','w') as f:
     f.write('import numpy as np\n')
-    f.write('def dkdt2d(Ex,Ey,nuxy,T,V):\n')
+    f.write('def dkdt2d(Ex,Ey,nuxy,nuyz,Gxy,T,V):\n')
     f.write('    c = np.cos(T)\n')
     f.write('    s = np.sin(T)\n')
     f.write('    delta = 1.0*Ex - 1.0*Ey*nuxy**2\n')

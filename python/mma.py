@@ -37,9 +37,7 @@ class MMA():
         self.c = 10000*np.ones((self.m,1))
         self.d = np.zeros((self.m,1))
 
-        self.fea_time   = 0
-        self.deriv_time = 0
-        self.iter_time  = 0
+        self.update_time = 0
 
     def iterate(self, x):
         if self.iter == 0:
@@ -54,28 +52,26 @@ class MMA():
         xold1 = self.xold1.copy()[np.newaxis].T
         xold2 = self.xold2.copy()[np.newaxis].T
 
-        t0 = time.time()
         f0val = self.fobj(x)
-        self.fea_time += time.time()-t0
-        
-        t0 = time.time()
         df0dx = self.dfobj(x)[np.newaxis].T
-        self.deriv_time += time.time()-t0
-        
         fval = np.array([[self.const(x)]])
         dfdx = self.dconst(x)[np.newaxis]
 
         t0 = time.time()
         xmma,ymma,zmma,lam,xsi,eta,mu,zet,s,self.low,self.upp = MMA.mmasub(self.m,self.n,self.iter,xval,self.xmin,self.xmax,
             xold1,xold2,f0val,df0dx,fval,dfdx,self.low,self.upp,self.a0,self.a,self.c,self.d,self.move)
-        self.iter_time += time.time()-t0
+        rho, _ = np.split(xmma.flatten(),2)
+        
+        theta, dcdt = np.split(x,2)[1], np.split(df0dx.flatten(),2)[1]
+        move_theta = np.split(self.move.flatten(),2)[1]
+        theta = np.minimum(np.maximum(theta-0.2*dcdt/f0val, theta-move_theta), theta+move_theta)
+        self.update_time += time.time()-t0
         
         self.iter += 1
         self.xold2 = self.xold1.copy()
         self.xold1 = x.copy()
 
-        return xmma.flatten()
-    
+        return np.concatenate((rho,theta))    
 
     # Function for the MMA sub problem
     def mmasub(m,n,iter,xval,xmin,xmax,xold1,xold2,f0val,df0dx,fval,dfdx,low,upp,a0,a,c,d,move):
