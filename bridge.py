@@ -24,11 +24,12 @@ comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
 
-# size should be odd to include 0 degrees
-theta0 = np.linspace(-90, 90, num=size)
+# size-1 should be odd to include 0 degrees
+theta0 = np.linspace(-90, 90, num=size-1)
+theta0 = np.append(theta0, None) # last one works with random initial condition
 
 solver = TopOpt(inputfile='bridge', dim='2D', jobname=str(int(theta0[rank])),
-                Ex=Ex, Ey=Ey, nuxy=nuxy, nuyz=nuxy, Gxy=Gxy, volfrac=0.4, r_rho=60, r_theta=90, theta0=theta0[rank], max_iter=100)
+                Ex=Ex, Ey=Ey, nuxy=nuxy, nuyz=nuxy, Gxy=Gxy, volfrac=0.4, r_rho=60, r_theta=90, theta0=theta0[rank], max_iter=100, echo=False)
 solver.set_solid_elem(np.where(solver.centers[:,1]>920)[0])
 solver.optim()
 
@@ -49,7 +50,7 @@ dt    = comm.gather(solver.time)
 
 if rank == 0:
     print('\n theta0      comp    iter    time')
-    for i in range(size):
+    for i in range(size-1):
         print('{:7.1f}  {:7.2f} {:7d} {:7.2f}'.format(theta0[i],comp[i],niter[i],dt[i]))
-    
+    print('         {:7.2f} {:7d} {:7.2f}'.format(comp[i],niter[i],dt[i]))
     print('\nTotal elapsed time: {:.2f}s'.format(MPI.Wtime()-t0))

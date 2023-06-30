@@ -44,52 +44,36 @@ t0 = MPI.Wtime()
 
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
-size = comm.Get_size()
 
-# size should be odd to include 0 degrees
-theta0 = np.linspace(-90, 90, num=size)
+volfrac = [0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6]
 
-f = [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4]
-comp, niter, dt, footprint = [], [], [], []
-for volfrac in f:
-    jobname = str(int(10*volfrac)) + '_' + str(int(theta0[rank]))
-    solver = TopOpt(inputfile='mbb3d', dim='3D', jobname=jobname,
-                Ex=Ex, Ey=Ey, nuxy=nuxy, nuyz=vmatrix, Gxy=Gxy, volfrac=volfrac, r_rho=6, r_theta=16, theta0=theta0[rank],
-                max_iter=100, move_rho=0.4, move_theta=10)
+jobname = str(int(100*volfrac[rank]))
+solver = TopOpt(inputfile='mbb3d_fine', dim='3D', jobname=jobname,
+	Ex=Ex, Ey=Ey, nuxy=nuxy, nuyz=vmatrix, Gxy=Gxy, volfrac=volfrac[rank], r_rho=6, r_theta=16, max_iter=60, echo=False)
+solver.optim()
+print('volfrac = {} - Elasped time: {:.2f}s'.format(volfrac[rank], solver.time))
 
-    solver.optim()
-    print('{} - volfrac = {} - Elasped time: {:.2f}s'.format(rank, volfrac, solver.time))
+post = Post3D(solver)
+post.plot_convergence()
+post.plot()
+post.plot_layer(layer=0)
+post.plot_layer(layer=1)
 
-    post = Post3D(solver)
-    post.plot_convergence()
-    post.plot_layer(layer=0)
-    post.plot_layer(layer=1)
+plt.close('all')
 
-    plt.close('all')
-
-    comp.append(solver.comp_hist[-1])
-    niter.append(solver.mma.iter)
-    dt.append(solver.time)
-    footprint.append(1000 * post.CO2_footprint(rho, CO2mat, CO2veh))
-
-comps      = comm.gather(comp)
-niters     = comm.gather(niter)
-dts        = comm.gather(dt)
-footprints = comm.gather(footprint)
+comp      = comm.gather(solver.comp_hist[-1])
+niter     = comm.gather(solver.mma.iter)
+dt        = comm.gather(solver.time)
+footprint = comm.gather(1000 * post.CO2_footprint(rho, CO2mat, CO2veh))
 
 if rank == 0:
-    mincomp = []
-    for j in range(len(f)):
-        print('\n**** volfrac = {:.1f} ****'.format(f[j]))
-        print(' theta0    comp    iter    time     CO2')
-        for i in range(size):
-            print('{:7.1f} {:7.2f} {:7d} {:7.2f} {:7.2f}'.format(theta0[i],comps[i][j],niters[i][j],dts[i][j],footprints[i][j]))
+    print(' volfrac    comp    iter    time     CO2')
+    for i in range(len(volfrac)):
+        print('{:7.2f}  {:7.2f} {:7d} {:7.2f} {:7.2f}'.format(volfrac[i],comp[i],niter[i],dt[i],footprint[i]))
         
-        mincomp.append(np.amin(np.array(comps)[:,j]))
-
-    f, mincomp = np.array(f), np.array(mincomp)
+    volfrac = np.array(volfrac)
     plt.figure()
-    plt.plot(f,f*mincomp)
+    plt.plot(volfrac,volfrac*comp)
     plt.ylabel('volfrac * compliance')
     plt.xlabel('volfrac')
     plt.savefig(res_dir/'optim.png')
