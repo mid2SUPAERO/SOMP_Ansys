@@ -13,7 +13,7 @@ Auxiliar files may have additional dependencies:
 
 ## Auxiliar files
 
-- `stiff2d.py` and `stiff3d.py`: Matlab symbolic calculation to determine the expression for $\frac{\partial c}{\partial \theta}$. Not used when running optimization, write `python/dkdt2d.py` and `python/dkdt3d.py`.
+- `stiff2d.py` and `stiff3d.py`: SymPy symbolic calculation to determine the expression for $\frac{\partial c}{\partial \theta}$. Not used when running optimization, write `python/dkdt2d.py` and `python/dkdt3d.py`.
 - `stiff2d.m` and `stiff3d.m`: Matlab symbolic calculation to determine the expression for $\frac{\partial c}{\partial \theta}$. Not used when running optimization, write `python/dkdt2d.py` and `python/dkdt3d.py`. Preferrable over SymPy because generates cleaner and faster functions, but both files are placed in `python/` directory for reference
 - `SimpleExample.ipynb`: Jupyter notebook with an example of 2D and 3D optimizations
 - `bridge.py`: example of a complete 2D optimization. Uses MPI to launch parallel processes with different initial orientations
