@@ -11,7 +11,7 @@ ANSYS_path = Path('mapdl')
 script_dir = Path('python/')
 res_dir    = Path('results/3d/')
 mod_dir    = Path('models/')
-TopOpt.load_paths(ANSYS_path, script_dir, res_dir, mod_dir)
+TopOpt.set_paths(ANSYS_path, script_dir, res_dir, mod_dir)
 
 # fiber: bamboo
 rhofiber  = 700e-12 # t/mm^3

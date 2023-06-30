@@ -7,20 +7,19 @@ import time
 
 # https://github.com/arjendeetman/GCMMA-MMA-Python
 """
-MMA(fobj, dfobj, const, dconst, xmin, xmax, move):
+MMA(fobj, dfobj, const, dconst, xmin, xmax):
     fobj: callable (x: np.array) -> objective function value
     dfboj: callable (x: np.array) -> objective function sensitivities: np.array
     const: callable (x: np.array) -> constraint function value: const(x) <= 0
     dconst: callable (x: np.array) -> derivatives of constraint function: np.array
     xmin: minimum value for each design variable: np.array
     xmax: maximum value for each design variable: np.array
-    move: move limit for each design variable: np.array
 
 iterate(x):
     returns updated x
 """
 class MMA():
-    def __init__(self,fobj,dfobj,const,dconst,xmin,xmax,move):
+    def __init__(self,fobj,dfobj,const,dconst,xmin,xmax):
         self.fobj   = fobj
         self.dfobj  = dfobj
         self.const  = const
@@ -29,7 +28,7 @@ class MMA():
         self.m = 1
         self.xmin = xmin[np.newaxis].T
         self.xmax = xmax[np.newaxis].T
-        self.move = move[np.newaxis].T
+        self.move = 0.3
 
         self.iter = 0
         self.a0 = 1.0 
@@ -60,21 +59,16 @@ class MMA():
         t0 = time.time()
         xmma,ymma,zmma,lam,xsi,eta,mu,zet,s,self.low,self.upp = MMA.mmasub(self.m,self.n,self.iter,xval,self.xmin,self.xmax,
             xold1,xold2,f0val,df0dx,fval,dfdx,self.low,self.upp,self.a0,self.a,self.c,self.d,self.move)
-        rho, _ = np.split(xmma.flatten(),2)
-        
-        theta, dcdt = np.split(x,2)[1], np.split(df0dx.flatten(),2)[1]
-        move_theta = np.split(self.move.flatten(),2)[1]
-        theta = np.minimum(np.maximum(theta-0.2*dcdt/f0val, theta-move_theta), theta+move_theta)
         self.update_time += time.time()-t0
         
         self.iter += 1
         self.xold2 = self.xold1.copy()
         self.xold1 = x.copy()
 
-        return np.concatenate((rho,theta))    
+        return xmma.flatten()   
 
     # Function for the MMA sub problem
-    def mmasub(m,n,iter,xval,xmin,xmax,xold1,xold2,f0val,df0dx,fval,dfdx,low,upp,a0,a,c,d,move):
+    def mmasub(m,n,iter,xval,xmin,xmax,xold1,xold2,f0val,df0dx,fval,dfdx,low,upp,a0,a,c,d, move):
         
         """
         This function mmasub performs one MMA-iteration, aimed at solving the nonlinear programming problem:

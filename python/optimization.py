@@ -20,16 +20,14 @@ Required APDL script files:
 TopOpt2D: 4-node 2D quad, PLANE182 in a rectangular domain, with KEYOPT(3) = 3 plane stress with thk
 TopOpt3D: 8-node 3D hex, SOLID185 in a cuboid domain
 
-TopOpt(inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, theta0, max_iter, move_rho, move_theta, dim, jobname, echo):
+TopOpt(inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, theta0, max_iter, dim, jobname, echo):
     inputfile: name of the model file (without .db)
     Ex, Ey, nuxy, nuyz, Gxy: material properties
     volfrac: volume fraction constraint for the optimization
     r_rho: radius of the density filter (adjusts minimum feature size)
     r_theta: radius of the orientation filter (adjusts fiber curvature)
-    theta0: initial orientation of the fibers, in degrees
+    theta0: initial orientation of the fibers, in degrees. Default: random distribution
     max_iter: number of iterations
-    move_rho: move limit for densities
-    move_theta: move limit for orientations, in degrees
     dim: optimization type, '2D' or '3D'
     jobname: subfolder of TopOpt.res_dir to store results for this optim. Default: stores results directly on TopOpt.res_dir
     echo: boolean, print status at each iteration?
@@ -55,7 +53,7 @@ class TopOpt():
         TopOpt.res_dir    = res_dir
         TopOpt.mod_dir    = mod_dir
     
-    def __init__(self, inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, theta0, max_iter=200, move_rho=0.3, move_theta=5, dim='2D', jobname=None, echo=True):
+    def __init__(self, inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, theta0=None, max_iter=200, dim='2D', jobname=None, echo=True):
         self.dim  = dim
         self.echo = echo
         self.dkdt = dkdt2d if dim == '2D' else dkdt3d
@@ -75,17 +73,19 @@ class TopOpt():
         self.nuxy   = nuxy
         self.nuyz   = nuyz
         self.Gxy    = Gxy
-        self.theta0 = np.deg2rad(theta0)
         
-        self.volfrac = volfrac
-        self.r_rho   = r_rho
-        self.r_theta = r_theta
-        self.penal   = 3
+        if theta0 is None:
+            # Random numbers between -pi/2 and pi/2
+            self.theta0 = np.pi * np.random.random(self.num_elem) - np.pi/2
+        else:
+            self.theta0 = np.deg2rad(theta0)
         
         self.max_iter   = max_iter
-        self.move_rho   = move_rho
-        self.move_theta = np.deg2rad(move_theta)
         self.rho_min    = 1e-3
+        self.penal      = 3
+        self.volfrac    = volfrac
+        self.r_rho      = r_rho
+        self.r_theta    = r_theta
         self.solid_elem = []
         
         self.density_filter     = DensityFilter(self.r_rho, self.centers)
@@ -140,9 +140,8 @@ class TopOpt():
 
         xmin = np.concatenate((self.rho_min*np.ones_like(rho), -np.pi*np.ones_like(theta)))
         xmax = np.concatenate((np.ones_like(rho), np.pi*np.ones_like(theta)))
-        move = np.concatenate((self.move_rho*np.ones(self.num_elem), self.move_theta*np.ones(self.num_elem)))
         
-        mma = MMA(self.fea,self.sensitivities,self.constraint,self.dconstraint,xmin,xmax,move)
+        mma = MMA(self.fea,self.sensitivities,self.constraint,self.dconstraint,xmin,xmax)
         
         self.rho_hist   = []
         self.theta_hist = []
@@ -175,7 +174,7 @@ class TopOpt():
         self.theta_hist.append(theta)
         self.comp_hist.append(c)
 
-        if self.echo: print("compliance = {:10.4f}".format(c))
+        if self.echo: print('compliance = {:10.4f}'.format(c))
         self.fea_time += time.time() - t0
         return c
     
@@ -188,33 +187,16 @@ class TopOpt():
         uku    = 2*energy/rho**self.penal # K: stiffness matrix with rho=1
         dcdrho = -self.penal * rho**(self.penal-1) * uku
         dcdrho = self.density_filter.filter(rho, dcdrho)
-        dcdrho[self.solid_elem] = 0
         
         # dc/dtheta
         u = np.loadtxt(self.res_dir/'nodal_solution_u.txt', dtype=float) # ux uy uz
         if self.dim == '2D':
-            u = u[:,[0,1]] # drop z displacement
+            u = u[:,[0,1]] # drop z dof
         dcdt = np.zeros(self.num_elem)
         for i in range(self.num_elem):
             dkdt = self.dkdt(self.Ex,self.Ey,self.nuxy,self.nuyz,self.Gxy,theta[i],self.elemvol[i])
-            ue = u[self.elmnodes[i,:],:].flatten()         
+            ue = u[self.elmnodes[i,:],:].flatten()
             dcdt[i] = -rho[i]**self.penal * ue.dot(dkdt.dot(ue))
-        
-#         import matplotlib.pyplot as plt
-#         x, y = np.meshgrid(np.unique(self.centers[:,0]),np.unique(self.centers[:,1]))
-#         res1, res2 = np.zeros_like(x), np.zeros_like(x)
-#         for e in range(self.num_elem):
-#             i = np.where(x[0,:] == self.centers[e,0])[0][0]
-#             j = np.where(y[:,0] == self.centers[e,1])[0][0]
-#             res1[j,i] = dcdt[e]
-#             if self.mma.iter > 1: res2[j,i] = self.theta_hist[-1][e] - self.theta_hist[-2][e]
-        
-#         x, y = np.meshgrid(np.unique(self.node_coord[:,0]),np.unique(self.node_coord[:,1]))
-#         plt.subplot(2,1,1)
-#         plt.pcolormesh(x,y,res1,cmap='coolwarm')
-#         plt.subplot(2,1,2)
-#         plt.pcolormesh(x,y,res2,cmap='coolwarm')
-#         plt.show()
         
         self.deriv_time += time.time() - t0
         return np.concatenate((dcdrho, dcdt))
@@ -234,15 +216,16 @@ class TopOpt():
     def optim(self):
         t0 = time.time()
         for _ in range(self.max_iter):
-            if self.echo: print("Starting iteration {:3d}...".format(self.mma.iter+1), end=' ')
+            if self.echo: print('Iteration {:3d}... '.format(self.mma.iter), end=' ')
             xnew = self.mma.iterate(self.x)
 
             rho, theta = np.split(xnew,2)
+            rho[self.solid_elem] = 1
             theta = self.orientation_filter.filter(rho,theta)
             self.x = np.concatenate((rho,theta))
             
         # Evaluating result from last iteration
-        if self.echo: print("Final design             ", end=' ')
+        if self.echo: print('Iteration {:3d}... '.format(self.mma.iter), end=' ')
         self.fea(self.x)
         
         self.clear_files()
