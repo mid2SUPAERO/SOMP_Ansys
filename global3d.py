@@ -96,6 +96,8 @@ for i, fiber in enumerate(fibers):
             plt.ylabel('volfrac * compliance')
             plt.xlabel('volfrac')
             plt.savefig(res_dir/(''.join(['_'.join([str(50), fiber, matrix]), '.png'])))
+        
+        comm.Barrier()
 
 if rank == 0:
     print('Total elapsed time: {:.2f}s'.format(MPI.Wtime()-t0))
