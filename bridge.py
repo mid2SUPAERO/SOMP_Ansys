@@ -28,8 +28,9 @@ size = comm.Get_size()
 theta0 = np.linspace(-90, 90, num=size-1)
 theta0 = np.append(theta0, None) # last one works with random initial condition
 
-solver = TopOpt(inputfile='bridge', dim='2D', jobname=str(int(theta0[rank])),
-                Ex=Ex, Ey=Ey, nuxy=nuxy, nuyz=nuxy, Gxy=Gxy, volfrac=0.4, r_rho=60, r_theta=90, theta0=theta0[rank], max_iter=100, echo=False)
+jobname = str(int(theta0[rank])) if rank != size-1 else 'rand'
+solver = TopOpt(inputfile='bridge', dim='2D', jobname=jobname,
+	Ex=Ex, Ey=Ey, nuxy=nuxy, nuyz=nuxy, Gxy=Gxy, volfrac=0.45, r_rho=70, r_theta=160, theta0=theta0[rank], max_iter=100, echo=False)
 solver.set_solid_elem(np.where(solver.centers[:,1]>920)[0])
 solver.optim()
 
@@ -52,5 +53,5 @@ if rank == 0:
     print('\n theta0      comp    iter    time')
     for i in range(size-1):
         print('{:7.1f}  {:7.2f} {:7d} {:7.2f}'.format(theta0[i],comp[i],niter[i],dt[i]))
-    print('         {:7.2f} {:7d} {:7.2f}'.format(comp[i],niter[i],dt[i]))
+    print('  rand   {:7.2f} {:7d} {:7.2f}'.format(comp[-1],niter[-1],dt[-1]))
     print('\nTotal elapsed time: {:.2f}s'.format(MPI.Wtime()-t0))

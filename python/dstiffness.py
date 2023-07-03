@@ -4,7 +4,7 @@ def dk2d(Ex,Ey,nuxy,nuyz,Gxy,T,A,V):
     points  = [-1/np.sqrt(3), 1/np.sqrt(3)]
     weights = [1, 1]
     
-    C   = C_fun(Ex,Ey,nuxy,nuyz,Gxy)[[0,1,5],:][:,[0,1,5]]
+    C   = C2d(Ex,Ey,nuxy,nuyz,Gxy)
     Tt  = Tt_fun(T)[[0,1,5],:][:,[0,1,5]]
     dTt = dTt_fun(T)[[0,1,5],:][:,[0,1,5]]
     
@@ -21,7 +21,7 @@ def dk3d(Ex,Ey,nuxy,nuyz,Gxy,T,A,V):
     points  = [-1/np.sqrt(3), 1/np.sqrt(3)]
     weights = [1, 1]
     
-    C   = C_fun(Ex,Ey,nuxy,nuyz,Gxy)
+    C   = C3d(Ex,Ey,nuxy,nuyz,Gxy)
     Ta  = Ta_fun(A)
     dTa = dTa_fun(A)
     Tt  = Tt_fun(T)
@@ -39,7 +39,18 @@ def dk3d(Ex,Ey,nuxy,nuyz,Gxy,T,A,V):
     dkda *= V
     return dkdt, dkda
 
-def C_fun(Ex,Ey,nuxy,nuyz,Gxy):
+def C2d(Ex,Ey,nuxy,nuyz,Gxy):
+    C = np.zeros((3,3))
+    C[0][0] = Ex**2/(Ex - Ey*nuxy**2)
+    C[0][1] = (Ex*Ey*nuxy)/(Ex - Ey*nuxy**2)
+    C[0][2] = 0
+    C[1][1] = (Ex*Ey)/(Ex - Ey*nuxy**2)
+    C[1][2] = 0
+    C[2][2] = Gxy
+    C += C.T - np.diag(C.diagonal())
+    return C
+
+def C3d(Ex,Ey,nuxy,nuyz,Gxy):
     C = np.zeros((6,6))
     C[0][0] = (Ex**2*nuyz - Ex**2)/(Ex*nuyz - Ex + 2*Ey*nuxy**2)
     C[0][1] = -(Ex*Ey*nuxy)/(Ex*nuyz - Ex + 2*Ey*nuxy**2)
