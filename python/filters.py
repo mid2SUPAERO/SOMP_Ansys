@@ -52,7 +52,7 @@ class DensityFilter(ConvolutionFilter):
         return self.H.dot(rho*dc)/rho
 
 class OrientationFilter(ConvolutionFilter):    
-    def filter(self, rho, theta):
+    def filter(self, rho, theta, alpha):
         # ignore element in filter if density is near to blank
         # multiply each column by the correspondent rho
         a = diags(rho)
@@ -62,4 +62,4 @@ class OrientationFilter(ConvolutionFilter):
         a = diags(1/H.sum(axis=1).A.ravel())
         H = a @ H
         
-        return H.dot(theta)
+        return H.dot(theta), H.dot(alpha)

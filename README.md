@@ -5,19 +5,16 @@
 The code was tested with the following libraries in Python >= 3.7:
 - NumPy >= 1.17.2
 - SciPy >= 1.3.1
-- Matplotlib >= 3.1.1
+- Matplotlib >= 3.4.3
 
-Auxiliar files may have additional dependencies:
-- SymPy >= 1.4
+Examples may have additional dependencies:
 - mpi4py 3.0.1
 
-## Auxiliar files
+## Examples
 
-- `stiff2d.py` and `stiff3d.py`: SymPy symbolic calculation to determine the expression for $\frac{\partial c}{\partial \theta}$. Not used when running optimization, write `python/dkdt2d.py` and `python/dkdt3d.py`.
-- `stiff2d.m` and `stiff3d.m`: Matlab symbolic calculation to determine the expression for $\frac{\partial c}{\partial \theta}$. Not used when running optimization, write `python/dkdt2d.py` and `python/dkdt3d.py`. Preferrable over SymPy because generates cleaner and faster functions, but both files are placed in `python/` directory for reference
 - `SimpleExample.ipynb`: Jupyter notebook with an example of 2D and 3D optimizations
 - `bridge.py`: example of a complete 2D optimization. Uses MPI to launch parallel processes with different initial orientations
-- `global3d.py`: example of a complete 3D optimization. Uses MPI to launch parallel processes with different volume fraction constraints
+- `global3d.py`: example of a complete 3D optimization. Uses MPI to launch parallel processes with different volume fraction constraints and materials
 
 ## Usage 
 
@@ -36,21 +33,25 @@ Auxiliar files may have additional dependencies:
 
 ### Class `TopOpt`
 
-- `TopOpt(inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, theta0, max_iter, dim, jobname, echo)`
+- `TopOpt(inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, theta0, alpha0, max_iter, dim, jobname, echo)`
   - `inputfile`: name of the model file (without .db)
   - `Ex`, `Ey`, `nuxy`, `nuyz`, `Gxy`: material properties (considered transverse isotropic, symmetry plane $yz$)
   - `volfrac`: volume fraction constraint for the optimization
   - `r_rho`: radius of the density filter (adjusts minimum feature size)
   - `r_theta`: radius of the orientation filter (adjusts fiber curvature)
   - `max_iter`: number of iterations
-  - `theta0`: initial orientation of the fibers, in degrees. Default: random distribution
-  - `dim`: optimization type, `'2D'` or `'3D'`
+  - `theta0`: initial orientation (around z) of the fibers, in degrees. Default: random distribution
+  - `alpha0`: initial orientation (around x) of the fibers, in degrees. Default: random distribution
+  - `dim`: optimization type
+    - `'2D'`: 2D optimization
+    - `'3D_layer'`: 3D optimization, structure will be printed in layers and fibers can rotate in the plane $xy$
+    - `'3D_free'`: 3D optimization, fiber orientations defined by rotations around $z$ and $x$ respectively
   - `jobname`: optional. Subfolder of `TopOpt.res_dir` to store results for this optim. Default: no subfolder, stores results directly on `TopOpt.res_dir`
   - `echo`: boolean. Print compliance at each iteration?
 
 - `TopOpt.set_solid_elem(self, solid_elem)`: list of elements whose densities will be fixed on 1. Indexing starting at 0
 
-- `TopOpt.optim(self)`: runs the optimization and returns the density `rho` and the orientation `theta` of each element as separate `numpy.array`
+- `TopOpt.optim(self)`: runs the optimization, saves all results within the `TopOpt`object
 
 ### Class `PostProcessor`
 
