@@ -38,6 +38,11 @@ Configure optimization:
     set_solid_elem(solid_elem): list of elements whose densities will be fixed on 1. Element indexing starting at 0
     
 Optimization function: optim()
+
+Design evaluation:
+    mass(rho): final design mass
+    disp_max(): maximum nodal displacement
+    CO2_footprint(rho, CO2mat, CO2veh): final design carbon footprint, considering material production and use in a vehicle
 """
 class TopOpt():
     def set_paths(ANSYS_path, script_dir, res_dir, mod_dir):
@@ -281,9 +286,31 @@ class TopOpt():
         
         self.clear_files()
         self.time = time.time() - t0
-        return rho, theta, alpha
+        # return rho, theta, alpha
+        return self.x
     
     # clear temporary Ansys files
     def clear_files(self):
         for filename in glob.glob('cleanup*'): os.remove(filename)
         for filename in glob.glob(self.title + '.*'): os.remove(filename)
+    
+    def mass(self, rho):
+        x = self.rho_hist[-1]
+        mass = rho * x.dot(self.elemvol)
+        return mass
+    
+    def disp_max(self):
+        u = np.loadtxt(self.res_dir/'nodal_solution_u.txt', dtype=float) # ux uy uz
+        u = np.linalg.norm(u, axis=1)
+        return np.amax(u)
+    
+    def CO2_footprint(self, rho, CO2mat, CO2veh):
+        """
+        rho: density
+        CO2mat: mass CO2 emmited per mass material (material production)
+        CO2veh: mass CO2 emitted per mass material during life (use in a vehicle)
+                = mass fuel per mass transported per lifetime * service life * mass CO2 emmited per mass fuel
+        """
+        x = self.rho_hist[-1]
+        mass = rho * x.dot(self.elemvol)
+        return mass * (CO2mat + CO2veh)

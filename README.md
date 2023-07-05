@@ -15,6 +15,7 @@ Examples may have additional dependencies:
 - `SimpleExample.ipynb`: Jupyter notebook with an example of 2D and 3D optimizations
 - `bridge.py`: example of a complete 2D optimization. Uses MPI to launch parallel processes with different initial orientations
 - `global3d.py`: example of a complete 3D optimization. Uses MPI to launch parallel processes with different volume fraction constraints and materials
+- `Bracket.ipynb`: Jupyter notebook with a more complex 3D optimization
 
 ## Usage 
 
@@ -49,17 +50,23 @@ Examples may have additional dependencies:
   - `jobname`: optional. Subfolder of `TopOpt.res_dir` to store results for this optim. Default: no subfolder, stores results directly on `TopOpt.res_dir`
   - `echo`: boolean. Print compliance at each iteration?
 
-- `TopOpt.set_solid_elem(self, solid_elem)`: list of elements whose densities will be fixed on 1. Indexing starting at 0
+- `set_solid_elem(self, solid_elem)`: list of elements whose densities will be fixed on 1. Indexing starting at 0
 
-- `TopOpt.optim(self)`: runs the optimization, saves all results within the `TopOpt`object
+- `optim(self)`: runs the optimization, saves all results within the `TopOpt`object
+
+- `mass(self, rho)`: returns the mass of the final design
+  - `rho`: density
+  
+- `mass(self)`: returns the maximum nodal displacement
+
+- `CO2_footprint(self, rho, CO2mat, CO2veh)`: returns the CO2 footprint of the final design
+  - `rho`: density
+  - `CO2mat`: mass CO2 emmited per mass material (material production)
+  - `CO2veh`: mass CO2 emitted per mass material during life (use in a vehicle) = mass fuel per mass transported per lifetime * service life * mass CO2 emmited per mass fuel
 
 ### Class `PostProcessor`
 
 - `Post2D(solver)`, `Post3D(solver)`
-- `CO2_footprint(self, rho, CO2mat, CO2veh)`: returns the CO2 footprint for the final design
-  - `rho`: density
-  - `CO2mat`: mass CO2 emmited per mass material (material production)
-  - `CO2veh`: mass CO2 emitted per mass material during life (use in a vehicle) = mass fuel per mass transported per lifetime * service life * mass CO2 emmited per mass fuel
 - `plot_convergence(self, starting_iteration=0)`: plots the convergence history
 - `plot(self, iteration=-1, filename=None, save=True, fig=None, ax=None)`: plots the configuration (densities and orientations)
-- `plot_layer(self, iteration=-1, layer=0, filename=None, save=True, fig=None, ax=None)`: only for 3D. Plots layer `layer` as a 2D plot, easier to visualise
+- `plot_layer(self, iteration=-1, layer=0, filename=None, save=True, fig=None, ax=None)`: only for `dim = '3D_layer'`. Plots layer `layer` as a 2D plot, easier to visualise

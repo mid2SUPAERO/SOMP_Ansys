@@ -9,17 +9,6 @@ class PostProcessor():
     def __init__(self, solver):
         self.solver = solver
         
-    def CO2_footprint(self, rho, CO2mat, CO2veh):
-        """
-        rho: density
-        CO2mat: mass CO2 emmited per mass material (material production)
-        CO2veh: mass CO2 emitted per mass material during life (use in a vehicle)
-                = mass fuel per mass transported per lifetime * service life * mass CO2 emmited per mass fuel
-        """
-        x = self.solver.rho_hist[-1]
-        mass = rho * x.dot(self.solver.elemvol)
-        return mass * (CO2mat + CO2veh)
-    
     def plot_convergence(self, start_iter=0, filename=None, save=True):
         plt.figure()
         plt.plot(range(start_iter,len(self.solver.comp_hist)), self.solver.comp_hist[start_iter:])
@@ -114,27 +103,48 @@ class Post3D(PostProcessor):
         ax.set_aspect('equal', 'box')
         plt.title('Layer {}'.format(layer))
         
-        x, y, density = self.make_grid_2d(layer, self.solver.rho_hist[iteration], nodes=True)
+        x, y, density = self.make_grid(layer, self.solver.rho_hist[iteration], nodes=True)
         norm = colors.Normalize(vmin=0, vmax=1)
         ax.pcolormesh(x, y, density, cmap='binary', norm=norm)
         
-        x, y, theta = self.make_grid_2d(layer, self.solver.theta_hist[iteration], nodes=False)
+        x, y, theta = self.make_grid(layer, self.solver.theta_hist[iteration], nodes=False)
         ax.quiver(x, y, np.cos(theta), np.sin(theta), color='white', pivot='mid', headwidth=0, headlength=0, headaxislength=0)
 
         if save:
             if filename is None: filename = self.solver.res_dir / f'design_layer{layer}.png'
             plt.savefig(filename)
             
-    def plot_orientation(self, iteration=-1, filename=None, save=True, fig=None, ax=None):
+    def plot_orientation(self, iteration=-1, threshold=0.3, elev=None, azim=None, filename=None, save=True, fig=None, ax=None):
         if ax is None:
-            fig = plt.figure(dpi=300)
+            fig = plt.figure(dpi=500)
             ax = fig.add_axes([0,0,1,1], projection='3d')
-            # ax.set_box_aspect((np.amax(self.solver.node_coord[:,0]),np.amax(self.solver.node_coord[:,1]),np.amax(self.solver.node_coord[:,2])))
+            deltax = np.amax(self.solver.node_coord[:,0]) - np.amin(self.solver.node_coord[:,0])
+            deltay = np.amax(self.solver.node_coord[:,1]) - np.amin(self.solver.node_coord[:,1])
+            deltaz = np.amax(self.solver.node_coord[:,2]) - np.amin(self.solver.node_coord[:,2])
+            ax.set_box_aspect((deltax,deltay,deltaz))            
+            ax.view_init(elev=elev, azim=azim)
         ax.cla()
         plt.title('Compliance = {:.4f}'.format(self.solver.comp_hist[iteration])) 
         
-        x, y, z, theta, length = self.make_grid_3d(self.solver.theta_hist[iteration])
-        ax.quiver(x, y, z, np.cos(theta), np.sin(theta), np.zeros_like(theta), color='red', pivot='middle', arrow_length_ratio=0, linewidth=0.3, length=length)
+        x = self.solver.centers[:,0]
+        y = self.solver.centers[:,1]
+        z = self.solver.centers[:,2]
+        theta = self.solver.theta_hist[iteration]
+        alpha = self.solver.alpha_hist[iteration]
+        u = np.cos(alpha)*np.cos(theta)
+        v = np.cos(alpha)*np.sin(theta)
+        w = np.sin(alpha)
+        
+        rho = self.solver.rho_hist[iteration]
+        x = x[rho > threshold]
+        y = y[rho > threshold]
+        z = z[rho > threshold]
+        u = u[rho > threshold]
+        v = v[rho > threshold]
+        w = w[rho > threshold]
+        color = [(u[i],v[i],w[i]) for i in range(len(u))]
+        
+        ax.quiver(x, y, z, u, v, w, color=color, pivot='middle', arrow_length_ratio=0, linewidth=0.3, length=3)
         
         if save:
             if filename is None: filename = self.solver.res_dir / 'orientation.png'
@@ -196,7 +206,7 @@ class Post3D(PostProcessor):
         z = np.array([[coord[0,2],coord[4,2]],[coord[3,2],coord[7,2]]])
         ax.plot_surface(x, y, z, color=c, rstride=1, cstride=1, alpha=alpha)
         
-    def make_grid_2d(self, layer, result, nodes):
+    def make_grid(self, layer, result, nodes):
         x, y = np.meshgrid(np.unique(self.solver.centers[:,0]),np.unique(self.solver.centers[:,1]))
         z = np.unique(self.solver.centers[:,2])[layer]
         res = np.zeros_like(x)
@@ -210,15 +220,3 @@ class Post3D(PostProcessor):
             x, y = np.meshgrid(np.unique(self.solver.node_coord[:,0]),np.unique(self.solver.node_coord[:,1]))
             
         return x, y, res
-
-    def make_grid_3d(self, result):
-        x, y, z = np.meshgrid(np.unique(self.solver.centers[:,0]),np.unique(self.solver.centers[:,1]),np.unique(self.solver.centers[:,2]))
-        length = 0.9*(z[0,0,0]-z[0,0,1])
-        res = np.zeros_like(x)
-        for e in range(self.solver.num_elem):
-            i = np.where(x[0,:,0] == self.solver.centers[e,0])[0][0]
-            j = np.where(y[:,0,0] == self.solver.centers[e,1])[0][0]
-            k = np.where(z[0,0,:] == self.solver.centers[e,2])[0][0]
-            res[j,i,k] = result[e]
-
-        return x, y, z, res, length
