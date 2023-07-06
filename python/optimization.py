@@ -38,6 +38,11 @@ Configure optimization:
     set_solid_elem(solid_elem): list of elements whose densities will be fixed on 1. Element indexing starting at 0
     
 Optimization function: optim()
+
+Design evaluation:
+    mass(rho): final design mass
+    disp_max(): maximum nodal displacement
+    CO2_footprint(rho, CO2mat, CO2veh): final design carbon footprint, considering material production and use in a vehicle
 """
 class TopOpt():
     def set_paths(ANSYS_path, script_dir, res_dir, mod_dir):
@@ -52,7 +57,7 @@ class TopOpt():
         TopOpt.res_dir    = res_dir
         TopOpt.mod_dir    = mod_dir
     
-    def __init__(self, inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, theta0=None, alpha0=None, max_iter=200, dim='3D_layer', jobname=None, echo=True):
+    def __init__(self, inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho=0, r_theta=0, theta0=None, alpha0=None, max_iter=200, dim='3D_layer', jobname=None, echo=True):
         self.dim  = dim
         self.echo = echo
 
@@ -147,12 +152,19 @@ class TopOpt():
     
     def create_optimizer(self):
         rho    = self.volfrac * np.ones(self.num_elem)
-        theta  = self.theta0 * np.ones(self.num_elem)
-        self.x = np.concatenate((rho,theta))
-
-        xmin = np.concatenate((self.rho_min*np.ones_like(rho), -np.pi*np.ones_like(theta)))
-        xmax = np.concatenate((np.ones_like(rho), np.pi*np.ones_like(theta)))
+        self.x = rho
         
+        xmin = self.rho_min*np.ones_like(rho)
+        xmax = np.ones_like(rho)
+        
+        # add theta variable
+        if self.dim == '2D' or self.dim == '3D_layer' or self.dim == '3D_free':
+            theta  = self.theta0 * np.ones(self.num_elem)
+            self.x = np.concatenate((rho,theta))
+            xmin = np.concatenate((xmin, -np.pi*np.ones_like(theta)))
+            xmax = np.concatenate((xmax, np.pi*np.ones_like(theta)))
+        
+        # add alpha variable
         if self.dim == '3D_free':
             alpha = self.alpha0 * np.ones(self.num_elem)
             self.x = np.concatenate((self.x,alpha))
@@ -171,7 +183,11 @@ class TopOpt():
     def fea(self, x):
         t0 = time.time()
         
-        if self.dim == '2D' or self.dim == '3D_layer':
+        if self.dim == 'SIMP':
+            rho = x.copy()
+            theta = np.zeros_like(rho)
+            alpha = np.zeros_like(rho)
+        elif self.dim == '2D' or self.dim == '3D_layer':
             rho, theta = np.split(x,2)
             alpha = np.zeros_like(theta)
         elif self.dim == '3D_free':
@@ -207,8 +223,11 @@ class TopOpt():
     def sensitivities(self, x):
         t0 = time.time()
         
-        # extract variables
-        if self.dim == '2D' or self.dim == '3D_layer':
+        if self.dim == 'SIMP':
+            rho = x.copy()
+            theta = np.zeros_like(rho)
+            alpha = np.zeros_like(rho)
+        elif self.dim == '2D' or self.dim == '3D_layer':
             rho, theta = np.split(x,2)
             alpha = np.zeros_like(theta)
         elif self.dim == '3D_free':
@@ -219,6 +238,10 @@ class TopOpt():
         uku    = 2*energy/rho**self.penal # K: stiffness matrix with rho=1
         dcdrho = -self.penal * rho**(self.penal-1) * uku
         dcdrho = self.density_filter.filter(rho, dcdrho)
+        
+        if self.dim == 'SIMP':
+            self.deriv_time += time.time() - t0
+            return dcdrho
         
         # dc/dtheta and dc/dalpha
         u = np.loadtxt(self.res_dir/'nodal_solution_u.txt', dtype=float) # ux uy uz
@@ -261,8 +284,12 @@ class TopOpt():
         for _ in range(self.max_iter):
             if self.echo: print('Iteration {:3d}... '.format(self.mma.iter), end=' ')
             xnew = self.mma.iterate(self.x)
-
-            if self.dim == '2D' or self.dim == '3D_layer':
+                
+            if self.dim == 'SIMP':
+                rho = xnew.copy()
+                theta = np.zeros_like(rho)
+                alpha = np.zeros_like(rho)
+            elif self.dim == '2D' or self.dim == '3D_layer':
                 rho, theta = np.split(xnew,2)
                 alpha = np.zeros_like(theta)
             elif self.dim == '3D_free':
@@ -270,7 +297,9 @@ class TopOpt():
             
             rho[self.solid_elem] = 1
             theta, alpha = self.orientation_filter.filter(rho,theta,alpha)
-            if self.dim == '2D' or self.dim == '3D_layer':
+            if self.dim == 'SIMP':
+                self.x = rho
+            elif self.dim == '2D' or self.dim == '3D_layer':
                 self.x = np.concatenate((rho,theta))
             elif self.dim == '3D_free':
                 self.x = np.concatenate((rho,theta,alpha))
@@ -281,9 +310,30 @@ class TopOpt():
         
         self.clear_files()
         self.time = time.time() - t0
-        return rho, theta, alpha
+        return self.x
     
     # clear temporary Ansys files
     def clear_files(self):
         for filename in glob.glob('cleanup*'): os.remove(filename)
         for filename in glob.glob(self.title + '.*'): os.remove(filename)
+    
+    def mass(self, rho):
+        x = self.rho_hist[-1]
+        mass = rho * x.dot(self.elemvol)
+        return mass
+    
+    def disp_max(self):
+        u = np.loadtxt(self.res_dir/'nodal_solution_u.txt', dtype=float) # ux uy uz
+        u = np.linalg.norm(u, axis=1)
+        return np.amax(u)
+    
+    def CO2_footprint(self, rho, CO2mat, CO2veh):
+        """
+        rho: density
+        CO2mat: mass CO2 emmited per mass material (material production)
+        CO2veh: mass CO2 emitted per mass material during life (use in a vehicle)
+                = mass fuel per mass transported per lifetime * service life * mass CO2 emmited per mass fuel
+        """
+        x = self.rho_hist[-1]
+        mass = rho * x.dot(self.elemvol)
+        return mass * (CO2mat + CO2veh)

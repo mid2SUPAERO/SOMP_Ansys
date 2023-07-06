@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.sparse import coo_matrix, diags
+from scipy.sparse import coo_matrix, diags, identity
 
 """
 Weights: max{0, rmin-distance(i,j)}
@@ -26,25 +26,21 @@ class ConvolutionFilter():
     
     # https://www.rmit.edu.au/research/centres-collaborations/centre-for-innovative-structures-and-materials/software
     def preFlt(rmin, num_elem, centers):
-        if rmin == 0: return np.identity(num_elem)
-        try:
-            limitElementNumber = 4000 # should be larger than (2*(rmin/elmsize)) ** 2
-            nfilter=int(num_elem*limitElementNumber) 
-            iH,jH,sH,cc = np.zeros(nfilter),np.zeros(nfilter),np.zeros(nfilter),0
-            for ei in range(num_elem):
-                ii = np.where(abs(centers[:,0] - centers[ei][0]) < rmin)[0]
-                jj = np.where(abs(centers[ii,1] - centers[ei][1]) < rmin)[0]
-                kk = np.where(abs(centers[ii[jj],2] - centers[ei][2]) < rmin)[0]
-                neighbors = ii[jj][kk]
-                iH[cc:cc+len(neighbors)] = ei
-                jH[cc:cc+len(neighbors)] = neighbors
-                eiH = np.maximum(0,rmin - ConvolutionFilter.distances(centers[ei],centers[neighbors]))
-                sH[cc:cc+len(neighbors)] = eiH / np.sum(eiH)
-                cc += len(neighbors)
-            H = coo_matrix((sH,(iH,jH)),shape=(num_elem,num_elem)).tocsr()
-        except:
-            H = np.identity(num_elem)
-            print('\n***   Insufficient memory or small limitElementNumber    ***\n')
+        if rmin == 0: return identity(num_elem)
+        limitElementNumber = 4000 # should be larger than (2*(rmin/elmsize)) ** 2
+        nfilter=int(num_elem*limitElementNumber) 
+        iH,jH,sH,cc = np.zeros(nfilter),np.zeros(nfilter),np.zeros(nfilter),0
+        for ei in range(num_elem):
+            ii = np.where(abs(centers[:,0] - centers[ei][0]) < rmin)[0]
+            jj = np.where(abs(centers[ii,1] - centers[ei][1]) < rmin)[0]
+            kk = np.where(abs(centers[ii[jj],2] - centers[ei][2]) < rmin)[0]
+            neighbors = ii[jj][kk]
+            iH[cc:cc+len(neighbors)] = ei
+            jH[cc:cc+len(neighbors)] = neighbors
+            eiH = np.maximum(0,rmin - ConvolutionFilter.distances(centers[ei],centers[neighbors]))
+            sH[cc:cc+len(neighbors)] = eiH / np.sum(eiH)
+            cc += len(neighbors)
+        H = coo_matrix((sH,(iH,jH)),shape=(num_elem,num_elem)).tocsr()
         return H
     
 class DensityFilter(ConvolutionFilter):
