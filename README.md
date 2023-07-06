@@ -58,11 +58,7 @@ Examples may have additional dependencies:
 - `mass(self, rho)`: returns the mass of the final design
   - `rho`: density
   
-<<<<<<< HEAD
 - `disp_max(self)`: returns the maximum nodal displacement
-=======
-- `mass(self)`: returns the maximum nodal displacement
->>>>>>> b9e2e13110c51d37cde6f045b8067f9343d76e8f
 
 - `CO2_footprint(self, rho, CO2mat, CO2veh)`: returns the CO2 footprint of the final design
   - `rho`: density
@@ -73,12 +69,7 @@ Examples may have additional dependencies:
 
 - `Post2D(solver)`, `Post3D(solver)`
 - `plot_convergence(self, starting_iteration=0)`: plots the convergence history
-<<<<<<< HEAD
 - `plot(self, iteration=-1, colorful=True, elev=None, azim=None, filename=None, save=True, fig=None, ax=None)`: plots the configuration (densities and orientations)
 - `animate(self, filename=None, colorful=True, elev=None, azim=None)`: creates an animation with `self.plot` history
 - `plot_layer(self, iteration=-1, layer=0, colorful=False, filename=None, save=True, fig=None, ax=None)`: only for `dim = '3D_layer'`. Plots layer `layer` as a 2D plot, easier to visualise
 - `animate_layer(self, layer, colorful=False, filename=None)`: creates an animation with `self.plot_layer` history
-=======
-- `plot(self, iteration=-1, filename=None, save=True, fig=None, ax=None)`: plots the configuration (densities and orientations)
-- `plot_layer(self, iteration=-1, layer=0, filename=None, save=True, fig=None, ax=None)`: only for `dim = '3D_layer'`. Plots layer `layer` as a 2D plot, easier to visualise
->>>>>>> b9e2e13110c51d37cde6f045b8067f9343d76e8f
