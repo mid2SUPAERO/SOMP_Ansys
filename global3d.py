@@ -54,7 +54,7 @@ for i, fiber in enumerate(fibers):
         CO2mat = (rhof*Vf*CO2f + rhom*Vm*CO2m)/rho # kgCO2/kg
 
         jobname = '_'.join([str(int(100*Vf)), fiber, matrix, str(int(100*f))])
-        solver = TopOpt(inputfile='mbb3d_fine', dim='3D_layer', jobname=jobname,
+        solver = TopOpt(inputfile='mbb3d_fine', dim='3D', jobname=jobname,
             Ex=Ex, Ey=Ey, nuxy=nuxy, nuyz=num, Gxy=Gxy, volfrac=f, r_rho=4, r_theta=10, max_iter=80, echo=False)
         solver.optim()
 
@@ -70,7 +70,7 @@ for i, fiber in enumerate(fibers):
 
         comp      = comm.gather(solver.comp_hist[-1])
         dt        = comm.gather(solver.time)
-        footprint = comm.gather(1000 * post.CO2_footprint(rho, CO2mat, CO2veh))
+        footprint = comm.gather(1000 * solver.CO2_footprint(rho, CO2mat, CO2veh))
 
         if rank == 0:
             print()
@@ -96,6 +96,8 @@ for i, fiber in enumerate(fibers):
             plt.ylabel('volfrac * compliance')
             plt.xlabel('volfrac')
             plt.savefig(res_dir/(''.join(['_'.join([str(50), fiber, matrix]), '.png'])))
+            
+        comm.Barrier()
 
 if rank == 0:
     print('Total elapsed time: {:.2f}s'.format(MPI.Wtime()-t0))

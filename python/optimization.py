@@ -310,6 +310,10 @@ class TopOpt():
         
         self.clear_files()
         self.time = time.time() - t0
+<<<<<<< HEAD
+=======
+        # return rho, theta, alpha
+>>>>>>> b9e2e13110c51d37cde6f045b8067f9343d76e8f
         return self.x
     
     # clear temporary Ansys files
