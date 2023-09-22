@@ -13,9 +13,8 @@ Examples may have additional dependencies:
 ## Examples
 
 - `SimpleExample.ipynb`: Jupyter notebook with an example of 2D and 3D optimizations
-- `bridge.py`: example of a complete 2D optimization. Uses MPI to launch parallel processes with different initial orientations
 - `global3d.py`: example of a complete 3D optimization. Uses MPI to launch parallel processes with different volume fraction constraints and materials
-- `Bracket.ipynb`: Jupyter notebook with a more complex 3D optimization
+- `SimpleExample.ipynb`: Jupyter notebook comparing different materials
 
 ## Usage 
 
