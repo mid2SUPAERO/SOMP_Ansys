@@ -7,6 +7,7 @@ from functools import partial
 
 from stl import mesh
 from mpl_toolkits import mplot3d
+from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes, mark_inset
 
 class PostProcessor():
     def __init__(self, solver):
@@ -23,8 +24,8 @@ class PostProcessor():
             plt.savefig(filename)
 
 class Post2D(PostProcessor):
-    def plot(self, iteration=-1, colorful=False, filename=None, save=True, fig=None, ax=None):
-        if fig == None: fig, ax = plt.subplots(dpi=300)
+    def plot(self, iteration=-1, colorful=False, filename=None, save=True, fig=None, ax=None, zoom=None):
+        if fig is None: fig, ax = plt.subplots(dpi=300)
         ax.cla()
         ax.set_aspect('equal')
         plt.xlim(np.amin(self.solver.node_coord[:,0]),np.amax(self.solver.node_coord[:,0]))
@@ -44,6 +45,20 @@ class Post2D(PostProcessor):
             color = 'black'
         
         ax.quiver(x, y, u, v, color=color, alpha=rho, pivot='mid', headwidth=0, headlength=0, headaxislength=0, linewidth=1.5)
+        
+        if zoom is not None:
+            axins = ax.inset_axes([zoom['xpos'],zoom['ypos'],zoom['width'],zoom['height']])
+            axins.set_xlim(zoom['xmin'], zoom['xmax'])
+            axins.set_ylim(zoom['ymin'], zoom['ymax'])
+            axins.spines['bottom'].set_color(zoom['color'])
+            axins.spines['top'].set_color(zoom['color'])
+            axins.spines['right'].set_color(zoom['color'])
+            axins.spines['left'].set_color(zoom['color'])
+            ax.indicate_inset_zoom(axins, edgecolor=zoom['color'])
+        
+            axins.quiver(x, y, u, v, color=color, alpha=rho, pivot='mid', headwidth=0, headlength=0, headaxislength=0, width=0.02, scale_units='x', scale=zoom['height'])
+            axins.set_xticks([])
+            axins.set_yticks([])
 
         if save:
             if filename is None: filename = self.solver.res_dir / 'design.png'
@@ -68,7 +83,7 @@ class Post3D(PostProcessor):
         ax.view_init(elev=elev, azim=azim)
         plt.title('Compliance = {:.4f}'.format(self.solver.comp_hist[iteration]))
 
-        if not domain_stl is None:
+        if domain_stl is not None:
             domain_mesh = mesh.Mesh.from_file(domain_stl)
             ax.add_collection3d(mplot3d.art3d.Poly3DCollection(domain_mesh.vectors, alpha=0.1))
         
@@ -93,8 +108,8 @@ class Post3D(PostProcessor):
             if filename is None: filename = self.solver.res_dir / 'design.png'
             plt.savefig(filename)
         
-    def plot_layer(self, iteration=-1, layer=0, colorful=False, filename=None, save=True, fig=None, ax=None):
-        if fig == None: fig, ax = plt.subplots(dpi=300)
+    def plot_layer(self, iteration=-1, layer=0, colorful=False, filename=None, save=True, fig=None, ax=None, zoom=None):
+        if fig is None: fig, ax = plt.subplots(dpi=300)
         ax.cla()
         ax.set_aspect('equal')
         plt.xlim(np.amin(self.solver.node_coord[:,0]),np.amax(self.solver.node_coord[:,0]))
@@ -117,6 +132,20 @@ class Post3D(PostProcessor):
             color = 'black'
         
         ax.quiver(x, y, u, v, color=color, alpha=rho, pivot='mid', headwidth=0, headlength=0, headaxislength=0, linewidth=1.5)
+        
+        if zoom is not None:
+            axins = ax.inset_axes([zoom['xpos'],zoom['ypos'],zoom['width'],zoom['height']])
+            axins.set_xlim(zoom['xmin'], zoom['xmax'])
+            axins.set_ylim(zoom['ymin'], zoom['ymax'])
+            axins.spines['bottom'].set_color(zoom['color'])
+            axins.spines['top'].set_color(zoom['color'])
+            axins.spines['right'].set_color(zoom['color'])
+            axins.spines['left'].set_color(zoom['color'])
+            ax.indicate_inset_zoom(axins, edgecolor=zoom['color'])
+        
+            axins.quiver(x, y, u, v, color=color, alpha=rho, pivot='mid', headwidth=0, headlength=0, headaxislength=0, width=0.02, scale_units='x', scale=zoom['height'])
+            axins.set_xticks([])
+            axins.set_yticks([])
 
         if save:
             if filename is None: filename = self.solver.res_dir / f'design_layer{layer}.png'
