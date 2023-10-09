@@ -16,6 +16,8 @@ Examples may have additional dependencies:
 - `SimpleExample.ipynb`: Jupyter notebook with an example of 2D and 3D optimizations
 - `global3d.py`: example of a complete 3D optimization. Uses MPI to launch parallel processes with different volume fraction constraints and materials
 - `NaturalFibres.ipynb`: Jupyter notebook comparing different materials
+- `bridge.py`: example of a complete 2D optimization. Uses MPI to launch parallel processes with different initial orientations
+- `Bracket.ipynb`: Jupyter notebook with a more complex 3D optimization
 
 ## Usage 
 
