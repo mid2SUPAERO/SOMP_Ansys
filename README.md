@@ -6,6 +6,7 @@ The code was tested with the following libraries in Python >= 3.7:
 - NumPy >= 1.21.5
 - SciPy >= 1.6.2
 - Matplotlib >= 3.5.1
+- jsonpickle >= 3.0.2
 
 Examples may have additional dependencies:
 - mpi4py 3.0.1
@@ -13,9 +14,8 @@ Examples may have additional dependencies:
 ## Examples
 
 - `SimpleExample.ipynb`: Jupyter notebook with an example of 2D and 3D optimizations
-- `bridge.py`: example of a complete 2D optimization. Uses MPI to launch parallel processes with different initial orientations
 - `global3d.py`: example of a complete 3D optimization. Uses MPI to launch parallel processes with different volume fraction constraints and materials
-- `Bracket.ipynb`: Jupyter notebook with a more complex 3D optimization
+- `NaturalFibres.ipynb`: Jupyter notebook comparing different materials
 
 ## Usage 
 
@@ -55,6 +55,10 @@ Examples may have additional dependencies:
 
 - `optim(self)`: runs the optimization, saves all results within the `TopOpt`object
 
+- `save(self, filename)`: saves object into a JSON file
+
+- `load(filename)`: returns `TopOpt` object from JSON file
+
 - `mass(self, rho)`: returns the mass of the final design
   - `rho`: density
   
@@ -69,7 +73,7 @@ Examples may have additional dependencies:
 
 - `Post2D(solver)`, `Post3D(solver)`
 - `plot_convergence(self, starting_iteration=0)`: plots the convergence history
-- `plot(self, iteration=-1, colorful=True, elev=None, azim=None, filename=None, save=True, fig=None, ax=None)`: plots the configuration (densities and orientations)
+- `plot(self, iteration=-1, colorful=True, elev=None, azim=None, filename=None, save=True, fig=None, ax=None, zoom=None)`: plots the configuration (densities and orientations). A zoom to a specific area can be added by passing a dict with fileds `xmin`, `xmax`, `ymin`, `ymax` representing the area of interest (in length units), `xpos`, `ypos`, `width`, `height` defining the position of the zoomed figure (fraction of the original axes), and `color` defining the color of the outline boxes
 - `animate(self, filename=None, colorful=True, elev=None, azim=None)`: creates an animation with `self.plot` history
-- `plot_layer(self, iteration=-1, layer=0, colorful=False, filename=None, save=True, fig=None, ax=None)`: only for `dim = '3D_layer'`. Plots layer `layer` as a 2D plot, easier to visualise
+- `plot_layer(self, iteration=-1, layer=0, colorful=False, filename=None, save=True, fig=None, ax=None, zoom=None)`: only for `dim = '3D_layer'`. Plots layer `layer` as a 2D plot, easier to visualise
 - `animate_layer(self, layer, colorful=False, filename=None)`: creates an animation with `self.plot_layer` history

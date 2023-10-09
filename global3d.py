@@ -15,7 +15,7 @@ TopOpt.set_paths(ANSYS_path, script_dir, res_dir, mod_dir)
 
 fibers   = ['bamboo', 'flax', 'hemp', 'hmcarbon', 'lmcarbon', 'sglass', 'eglass']
 rhofiber = [700e-12, 1470e-12, 1490e-12, 2105e-12, 1820e-12, 2495e-12, 2575e-12] # t/mm^3
-Efiber   = [17.5e3, 53.5e3, 62.5e3, 62.5e3, 760e3, 242.5e3, 89.5e3, 78.5e3] # MPa
+Efiber   = [17.5e3, 53.5e3, 62.5e3, 760e3, 242.5e3, 89.5e3, 78.5e3] # MPa
 nufiber  = [0.04, 0.355, 0.275, 0.105, 0.105, 0.22, 0.22]
 CO2fiber = [1.0565, 0.44, 1.6, 68.1, 20.3, 2.905, 2.45] # kgCO2/kg
 
@@ -49,6 +49,7 @@ for i, fiber in enumerate(fibers):
         Ey   = Ef*Em / (Ef*Vm + Em*Vf)
         Gxy  = Gf*Gm / (Gf*Vm + Gm*Vf)
         nuxy = nuf*Vf + num*Vm
+        nuyz = nuxy * (1-nuxy*Ey/Ex)/(1-nuxy)
         rho  = rhof*Vf + rhom*Vm
 
         CO2mat = (rhof*Vf*CO2f + rhom*Vm*CO2m)/rho # kgCO2/kg

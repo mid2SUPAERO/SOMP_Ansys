@@ -1,3 +1,4 @@
 results/
+!results/*.out
 python/__pycache__/
 .ipynb_checkpoints/

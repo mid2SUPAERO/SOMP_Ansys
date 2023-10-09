@@ -27,7 +27,7 @@ class ConvolutionFilter():
     # https://www.rmit.edu.au/research/centres-collaborations/centre-for-innovative-structures-and-materials/software
     def preFlt(rmin, num_elem, centers):
         if rmin == 0: return identity(num_elem)
-        limitElementNumber = 4000 # should be larger than (2*(rmin/elmsize)) ** 2
+        limitElementNumber = 1000 # should be larger than (2*(rmin/elmsize)) ** 2
         nfilter=int(num_elem*limitElementNumber) 
         iH,jH,sH,cc = np.zeros(nfilter),np.zeros(nfilter),np.zeros(nfilter),0
         for ei in range(num_elem):
