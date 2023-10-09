@@ -2,6 +2,7 @@ import subprocess
 import time
 import os, glob
 import numpy as np
+import json, jsonpickle
 
 from .dstiffness import dk2d, dk3d
 from .filters import DensityFilter, OrientationFilter
@@ -38,6 +39,10 @@ Configure optimization:
     set_solid_elem(solid_elem): list of elements whose densities will be fixed on 1. Element indexing starting at 0
     
 Optimization function: optim()
+
+Saving results:
+    save(filename): saves object as JSON
+    load(filename): returns the object from JSON
 
 Design evaluation:
     mass(rho): final design mass
@@ -316,6 +321,18 @@ class TopOpt():
     def clear_files(self):
         for filename in glob.glob('cleanup*'): os.remove(filename)
         for filename in glob.glob(self.title + '.*'): os.remove(filename)
+            
+    def save(self, filename=None):
+        if filename is None: filename = self.res_dir / 'topopt.json'
+        
+        json_str = json.dumps(jsonpickle.encode(self), indent=2)
+        with open(filename, 'w') as f:
+            f.write(json_str)
+            
+    def load(filename):
+        with open(filename, 'r') as f:
+            data = json.load(f)
+        return jsonpickle.decode(data)
     
     def mass(self, rho):
         x = self.rho_hist[-1]

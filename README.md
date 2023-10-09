@@ -6,6 +6,7 @@ The code was tested with the following libraries in Python >= 3.7:
 - NumPy >= 1.21.5
 - SciPy >= 1.6.2
 - Matplotlib >= 3.5.1
+- jsonpickle >= 3.0.2
 
 Examples may have additional dependencies:
 - mpi4py 3.0.1
@@ -14,7 +15,7 @@ Examples may have additional dependencies:
 
 - `SimpleExample.ipynb`: Jupyter notebook with an example of 2D and 3D optimizations
 - `global3d.py`: example of a complete 3D optimization. Uses MPI to launch parallel processes with different volume fraction constraints and materials
-- `SimpleExample.ipynb`: Jupyter notebook comparing different materials
+- `NaturalFibres.ipynb`: Jupyter notebook comparing different materials
 
 ## Usage 
 
@@ -53,6 +54,10 @@ Examples may have additional dependencies:
 - `set_solid_elem(self, solid_elem)`: list of elements whose densities will be fixed on 1. Indexing starting at 0
 
 - `optim(self)`: runs the optimization, saves all results within the `TopOpt`object
+
+- `save(self, filename)`: saves object into a JSON file
+
+- `load(filename)`: returns `TopOpt` object from JSON file
 
 - `mass(self, rho)`: returns the mass of the final design
   - `rho`: density
