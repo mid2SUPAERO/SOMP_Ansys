@@ -97,8 +97,8 @@ class TopOpt():
             self.theta0 = np.deg2rad(theta0)
             
         if alpha0 is None:
-            # Random numbers between -pi and pi
-            self.alpha0 = 2*np.pi * np.random.random(self.num_elem) - np.pi
+            # Random numbers between -pi/2 and pi/2
+            self.alpha0 = np.pi * np.random.random(self.num_elem) - np.pi/2
         else:
             self.alpha0 = np.deg2rad(alpha0)
         
@@ -200,15 +200,20 @@ class TopOpt():
             
         theta, alpha = self.orientation_filter.filter(rho,theta,alpha)
         
-        # Generate file with material properties for each element
-        Ex   = rho**self.penal * self.Ex
-        Ey   = rho**self.penal * self.Ey
-        nuxy = self.nuxy * np.ones(self.num_elem)
-        nuyz = self.nuyz * np.ones(self.num_elem)
-        Gxy  = rho**self.penal * self.Gxy
+        # Generate file with 1000 discrete materials
+        rho_disc = np.linspace(0.001, 1, 1000)
+        Ex   = rho_disc**self.penal * self.Ex
+        Ey   = rho_disc**self.penal * self.Ey
+        nuxy = self.nuxy * np.ones(1000)
+        nuyz = self.nuyz * np.ones(1000)
+        Gxy  = rho_disc**self.penal * self.Gxy
         Gyz  = Ey/(2*(1+nuyz))
-        material = np.array([Ex, Ey, nuxy, nuyz, Gxy, Gyz, np.rad2deg(theta), np.deg2rad(alpha)]).T
-        np.savetxt(self.res_dir/'material.txt', material, fmt=' %-.7E', newline='\n')
+        materials = np.array([Ex, Ey, nuxy, nuyz, Gxy, Gyz]).T
+        np.savetxt(self.res_dir/'materials.txt', materials, fmt=' %-.7E', newline='\n')
+        
+        # Generate file with material properties for each element
+        props = np.array([1000*rho, np.rad2deg(theta), np.deg2rad(alpha)]).T
+        np.savetxt(self.res_dir/'elem_props.txt', props, fmt='%5d %-.7E %-.7E', newline='\n')
         
         # Solve
         subprocess.run(self.result_cmd)
