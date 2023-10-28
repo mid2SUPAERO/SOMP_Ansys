@@ -7,19 +7,20 @@ import time
 
 # https://github.com/arjendeetman/GCMMA-MMA-Python
 """
-MMA(fobj, dfobj, const, dconst, xmin, xmax):
+MMA(fobj, dfobj, const, dconst, xmin, xmax, move):
     fobj: callable (x: np.array) -> objective function value
     dfboj: callable (x: np.array) -> objective function sensitivities: np.array
     const: callable (x: np.array) -> constraint function value: const(x) <= 0
     dconst: callable (x: np.array) -> derivatives of constraint function: np.array
     xmin: minimum value for each design variable: np.array
     xmax: maximum value for each design variable: np.array
+    move: move limit for all varaibles, in a percentage of the allowable range
 
 iterate(x):
     returns updated x
 """
 class MMA():
-    def __init__(self,fobj,dfobj,const,dconst,xmin,xmax):
+    def __init__(self,fobj,dfobj,const,dconst,xmin,xmax,move):
         self.fobj   = fobj
         self.dfobj  = dfobj
         self.const  = const
@@ -28,7 +29,7 @@ class MMA():
         self.m = 1
         self.xmin = xmin[np.newaxis].T
         self.xmax = xmax[np.newaxis].T
-        self.move = 0.3
+        self.move = move
 
         self.iter = 0
         self.a0 = 1.0 

@@ -29,7 +29,7 @@ theta0 = np.linspace(-90, 90, num=size-1)
 theta0 = np.append(theta0, None) # last one works with random initial condition
 
 jobname = str(int(theta0[rank])) if rank != size-1 else 'rand'
-solver = TopOpt(inputfile='bridge', dim='2D', jobname=jobname,
+solver = TopOpt(inputfiles='bridge', dim='2D', jobname=jobname,
 	Ex=Ex, Ey=Ey, nuxy=nuxy, nuyz=nuxy, Gxy=Gxy, volfrac=0.45, r_rho=70, r_theta=160, theta0=theta0[rank], max_iter=100, echo=False)
 solver.set_solid_elem(np.where(solver.centers[:,1]>920)[0])
 solver.optim()

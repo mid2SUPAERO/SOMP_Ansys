@@ -36,12 +36,13 @@ Examples may have additional dependencies:
 
 ### Class `TopOpt`
 
-- `TopOpt(inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, theta0, alpha0, max_iter, dim, jobname, echo)`
-  - `inputfile`: name of the model file (without .db)
+- `TopOpt(inputfiles, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, theta0, alpha0, move, max_iter, dim, jobname, echo)`
+  - `inputfiles`: name of the model file (without .db). For multiple load cases, tuple with all model files
   - `Ex`, `Ey`, `nuxy`, `nuyz`, `Gxy`: material properties (considered transverse isotropic, symmetry plane $yz$)
   - `volfrac`: volume fraction constraint for the optimization
   - `r_rho`: radius of the density filter (adjusts minimum feature size)
   - `r_theta`: radius of the orientation filter (adjusts fiber curvature)
+  - `move`: move limit for variable updating, as a fraction of the allowed range
   - `max_iter`: number of iterations
   - `theta0`: initial orientation (around z) of the fibers, in degrees. Default: random distribution
   - `alpha0`: initial orientation (around x) of the fibers, in degrees. Default: random distribution

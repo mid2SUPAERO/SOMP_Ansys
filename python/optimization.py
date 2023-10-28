@@ -16,17 +16,18 @@ Required APDL script files:
     ansys_meshdata_3d.txt: gets mesh properties for 3D optimization
     ansys_solve.txt: calls finite element analysis and stores results
 
-TopOpt2D: 4-node 2D quad, PLANE182 in a rectangular domain, with KEYOPT(3) = 3 plane stress with thk
-TopOpt3D: 8-node 3D hex, SOLID185 in a cuboid domain
+TopOpt2D: 4-node 2D quad, PLANE182, with KEYOPT(3) = 3 plane stress with thk
+TopOpt3D: 8-node 3D hex, SOLID185
 
-TopOpt(inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, theta0, alpha0, max_iter, dim, jobname, echo):
-    inputfile: name of the model file (without .db)
+TopOpt(inputfiles, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, theta0, alpha0, move, max_iter, dim, jobname, echo):
+    inputfiles: name of the model file (without .db). For multiple load cases, tuple with all model files
     Ex, Ey, nuxy, nuyz, Gxy: material properties
     volfrac: volume fraction constraint for the optimization
     r_rho: radius of the density filter (adjusts minimum feature size)
     r_theta: radius of the orientation filter (adjusts fiber curvature)
     theta0: initial orientation (around z) of the fibers, in degrees. Default: random distribution
     alpha0: initial orientation (around x) of the fibers, in degrees. Default: random distribution
+    move: move limit for variable updating, as a fraction of the allowed range
     max_iter: number of iterations
     dim: optimization type, '2D', '3D_layer' or '3D_free'
     jobname: subfolder of TopOpt.res_dir to store results for this optim. Default: stores results directly on TopOpt.res_dir
@@ -62,9 +63,13 @@ class TopOpt():
         TopOpt.res_dir    = res_dir
         TopOpt.mod_dir    = mod_dir
     
-    def __init__(self, inputfile, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho=0, r_theta=0, theta0=None, alpha0=None, max_iter=200, dim='3D_layer', jobname=None, echo=True):
+    def __init__(self, inputfiles, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho=0, r_theta=0, theta0=None, alpha0=None, move=0.3, max_iter=200, dim='3D_layer', jobname=None, echo=True):
         self.dim  = dim
         self.echo = echo
+        
+        if isinstance(inputfiles,str): inputfiles = (inputfiles,)
+        self.load_cases     = len(inputfiles)
+        self.comp_max_order = 8               # using 8-norm as a differentiable max function of all compliances
 
         # dkdt, dkda = dk(Ex,Ey,nuxy,nuyz,Gxy,theta,alpha,elmvol)
         if dim == '2D':
@@ -74,14 +79,17 @@ class TopOpt():
         elif dim == '3D_free':
             self.dk = dk3d
         
-        self.jobname = jobname
-        if jobname is None:
-            self.res_dir = TopOpt.res_dir
-        else:
-            self.res_dir = TopOpt.res_dir / jobname
-        self.res_dir.mkdir(parents=True, exist_ok=True)
+        self.jobname = jobname     
+        self.res_dir = []
+        for lc, inputfile in enumerate(inputfiles):
+            if jobname is None:
+                self.res_dir.append(TopOpt.res_dir / ('load_case_' + str(lc+1)))
+            else:
+                self.res_dir.append(TopOpt.res_dir / jobname / ('load_case_' + str(lc+1)))
+            self.res_dir[lc].mkdir(parents=True, exist_ok=True)
+        self.res_root = self.res_dir[0].parent
         
-        self.meshdata_cmd, self.result_cmd = self.build_apdl_scripts(inputfile)
+        self.meshdata_cmd, self.result_cmd = self.build_apdl_scripts(inputfiles)
         self.num_elem, self.num_node, self.centers, self.elemvol, self.elmnodes, self.node_coord = self.get_mesh_data()
     
         self.Ex   = Ex
@@ -108,6 +116,7 @@ class TopOpt():
         self.volfrac    = volfrac
         self.r_rho      = r_rho
         self.r_theta    = r_theta
+        self.move       = move
         self.solid_elem = []
         
         self.density_filter     = DensityFilter(self.r_rho, self.centers)
@@ -117,41 +126,47 @@ class TopOpt():
         self.deriv_time = 0
         self.mma        = self.create_optimizer()
     
-    def build_apdl_scripts(self, inputfile):
-        self.title = inputfile if self.jobname is None else self.jobname.replace('-','m')
+    def build_apdl_scripts(self, inputfiles):
+        self.title = inputfiles[0] if self.jobname is None else self.jobname
         meshdata_base = 'ansys_meshdata_2d.txt' if self.dim == '2D' else 'ansys_meshdata_3d.txt'
 
-        with open(self.res_dir/'ansys_meshdata.txt', 'w') as f:
-            f.write(f"RESUME,'{inputfile}','db','{TopOpt.mod_dir}',0,0\n")
-            f.write(f"/CWD,'{self.res_dir}'\n")
+        # meshdata script
+        with open(self.res_root/'ansys_meshdata.txt', 'w') as f:
+            f.write(f"RESUME,'{inputfiles[0]}','db','{TopOpt.mod_dir}',0,0\n")
+            f.write(f"/CWD,'{self.res_root}'\n")
             f.write(f"/FILENAME,{self.title},1\n")
             f.write(f"/TITLE,{self.title}\n")
             f.write(open(TopOpt.script_dir/meshdata_base).read())
-            
-        with open(self.res_dir/'ansys_solve.txt', 'w') as f:
-            f.write(f"RESUME,'{inputfile}','db','{TopOpt.mod_dir}',0,0\n")
-            f.write(f"/CWD,'{self.res_dir}'\n")
-            f.write(f"/FILENAME,{self.title},1\n")
-            f.write(f"/TITLE,{self.title}\n")
-            f.write(open(TopOpt.script_dir/'ansys_solve.txt').read())
-                  
-        meshdata_cmd = [TopOpt.ANSYS_path, '-b', '-i', self.res_dir/'ansys_meshdata.txt', '-o', self.res_dir/'meshdata.out', '-smp']
-        result_cmd   = [TopOpt.ANSYS_path, '-b', '-i', self.res_dir/'ansys_solve.txt', '-o', self.res_dir/'solve.out', '-smp']
-
-        if not self.jobname is None:
+        
+        meshdata_cmd = [TopOpt.ANSYS_path, '-b', '-i', self.res_root/'ansys_meshdata.txt', '-o', self.res_root/'meshdata.out', '-smp']
+        if self.jobname is not None:
             meshdata_cmd += ['-j', self.title]
-            result_cmd   += ['-j', self.title]
+        
+        # solve scripts
+        result_cmd = []
+        for lc, inputfile in enumerate(inputfiles):
+            with open(self.res_dir[lc]/'ansys_solve.txt', 'w') as f:
+                f.write(f"RESUME,'{inputfile}','db','{TopOpt.mod_dir}',0,0\n")
+                f.write(f"/CWD,'{self.res_dir[lc]}'\n")
+                f.write(f"/FILENAME,{self.title},1\n")
+                f.write(f"/TITLE,{self.title}\n")
+                f.write(open(TopOpt.script_dir/'ansys_solve.txt').read())
+        
+            cmd = [TopOpt.ANSYS_path, '-b', '-i', self.res_dir[lc]/'ansys_solve.txt', '-o', self.res_dir[lc]/'solve.out', '-smp']
+            if self.jobname is not None:
+                cmd += ['-j', self.title]
+            result_cmd.append(cmd)
             
         return meshdata_cmd, result_cmd
     
     def get_mesh_data(self):
         subprocess.run(self.meshdata_cmd)
         
-        num_elem, num_node = np.loadtxt(self.res_dir/'elements_nodes_counts.txt', dtype=int) # num_elm num_nodes
-        centers            = np.loadtxt(self.res_dir/'elements_centers.txt')[:, 1:] # label x y z
-        elmvol             = np.loadtxt(self.res_dir/'elements_volume.txt')[:,1] # label elmvol
-        elmnodes           = np.loadtxt(self.res_dir/'elements_nodes.txt', dtype=int) - 1 # n1 n2 n3 n4 ...
-        node_coord         = np.loadtxt(self.res_dir/'node_coordinates.txt') # x y z
+        num_elem, num_node = np.loadtxt(self.res_root/'elements_nodes_counts.txt', dtype=int) # num_elm num_nodes
+        centers            = np.loadtxt(self.res_root/'elements_centers.txt')[:, 1:] # label x y z
+        elmvol             = np.loadtxt(self.res_root/'elements_volume.txt')[:,1] # label elmvol
+        elmnodes           = np.loadtxt(self.res_root/'elements_nodes.txt', dtype=int) - 1 # n1 n2 n3 n4 ...
+        node_coord         = np.loadtxt(self.res_root/'node_coordinates.txt') # x y z
         
         return num_elem, num_node, centers, elmvol, elmnodes, node_coord
     
@@ -166,22 +181,23 @@ class TopOpt():
         if self.dim == '2D' or self.dim == '3D_layer' or self.dim == '3D_free':
             theta  = self.theta0 * np.ones(self.num_elem)
             self.x = np.concatenate((rho,theta))
-            xmin = np.concatenate((xmin, -np.pi*np.ones_like(theta)))
-            xmax = np.concatenate((xmax, np.pi*np.ones_like(theta)))
+            xmin = np.concatenate((xmin, -np.pi/2*np.ones_like(theta)))
+            xmax = np.concatenate((xmax, np.pi/2*np.ones_like(theta)))
         
         # add alpha variable
         if self.dim == '3D_free':
             alpha = self.alpha0 * np.ones(self.num_elem)
             self.x = np.concatenate((self.x,alpha))
-            xmin = np.concatenate((xmin, -2*np.pi*np.ones_like(alpha)))
-            xmax = np.concatenate((xmax, 2*np.pi*np.ones_like(alpha)))
+            xmin = np.concatenate((xmin, -np.pi/2*np.ones_like(alpha)))
+            xmax = np.concatenate((xmax, np.pi/2*np.ones_like(alpha)))
         
-        mma = MMA(self.fea,self.sensitivities,self.constraint,self.dconstraint,xmin,xmax)
+        mma = MMA(self.fea,self.sensitivities,self.constraint,self.dconstraint,xmin,xmax,self.move)
         
-        self.rho_hist   = []
-        self.theta_hist = []
-        self.alpha_hist = []
-        self.comp_hist  = []
+        self.rho_hist      = []
+        self.theta_hist    = []
+        self.alpha_hist    = []
+        self.comp_hist     = [[] for _ in range(self.load_cases)]
+        self.comp_max_hist = []
         
         return mma
     
@@ -209,26 +225,35 @@ class TopOpt():
         Gxy  = rho_disc**self.penal * self.Gxy
         Gyz  = Ey/(2*(1+nuyz))
         materials = np.array([Ex, Ey, nuxy, nuyz, Gxy, Gyz]).T
-        np.savetxt(self.res_dir/'materials.txt', materials, fmt=' %-.7E', newline='\n')
+        for lc in range(self.load_cases):
+            np.savetxt(self.res_dir[lc]/'materials.txt', materials, fmt=' %-.7E', newline='\n')
         
         # Generate file with material properties for each element
         props = np.array([1000*rho, np.rad2deg(theta), np.deg2rad(alpha)]).T
-        np.savetxt(self.res_dir/'elem_props.txt', props, fmt='%5d %-.7E %-.7E', newline='\n')
+        for lc in range(self.load_cases):
+            np.savetxt(self.res_dir[lc]/'elem_props.txt', props, fmt='%5d %-.7E %-.7E', newline='\n')
         
         # Solve
-        subprocess.run(self.result_cmd)
-        energy = np.loadtxt(self.res_dir/'strain_energy.txt', dtype=float) # strain_energy
-        c = 2*np.sum(energy)
+        c = []
+        for lc in range(self.load_cases):
+            subprocess.run(self.result_cmd[lc])
+            energy = np.loadtxt(self.res_dir[lc]/'strain_energy.txt', dtype=float) # strain_energy
+            c.append(2*np.sum(energy))
+            self.comp_hist[lc].append(c[-1])
+            
+            if self.echo: print('c_{} = {:10.4f}'.format(lc+1,self.comp_hist[lc][-1]), end=', ')
+            
+        comp_max = np.linalg.norm(np.array(c), ord=self.comp_max_order)
 
         # Save history
         self.rho_hist.append(rho)
         self.theta_hist.append(theta)
         self.alpha_hist.append(alpha)
-        self.comp_hist.append(c)
+        self.comp_max_hist.append(comp_max)
 
-        if self.echo: print('compliance = {:10.4f}'.format(c))
         self.fea_time += time.time() - t0
-        return c
+        if self.echo: print()
+        return comp_max
     
     def sensitivities(self, x):
         t0 = time.time()
@@ -243,29 +268,42 @@ class TopOpt():
         elif self.dim == '3D_free':
             rho, theta, alpha = np.split(x,3)
         
-        # dc/drho
-        energy = np.loadtxt(self.res_dir/'strain_energy.txt', dtype=float) # strain_energy
-        uku    = 2*energy/rho**self.penal # K: stiffness matrix with rho=1
-        dcdrho = -self.penal * rho**(self.penal-1) * uku
-        dcdrho = self.density_filter.filter(rho, dcdrho)
+        # dcmax/drho = sum(ci**(n-1).cmax**(1-n).dcirho)
+        dcdrho = np.zeros_like(rho)
+        for lc in range(self.load_cases):
+            energy = np.loadtxt(self.res_dir[lc]/'strain_energy.txt', dtype=float) # strain_energy
+            uku    = 2*energy/rho**self.penal # K: stiffness matrix with rho=1
+            dcidrho = -self.penal * rho**(self.penal-1) * uku
+            dcidrho = self.density_filter.filter(rho, dcidrho)
+            dcdrho += self.comp_hist[lc][-1]**(self.comp_max_order-1) * dcidrho
+        dcdrho *= self.comp_max_hist[-1]**(1-self.comp_max_order)
         
         if self.dim == 'SIMP':
             self.deriv_time += time.time() - t0
             return dcdrho
         
         # dc/dtheta and dc/dalpha
-        u = np.loadtxt(self.res_dir/'nodal_solution_u.txt', dtype=float) # ux uy uz
-        if self.dim == '2D':
-            u = u[:,[0,1]] # drop z dof
+        dcdt = np.zeros_like(theta)
+        dcda = np.zeros_like(alpha)
+        for lc in range(self.load_cases):
+            u = np.loadtxt(self.res_dir[lc]/'nodal_solution_u.txt', dtype=float) # ux uy uz
+            if self.dim == '2D':
+                u = u[:,[0,1]] # drop z dof
+
+            dcidt = np.zeros_like(theta)
+            dcida = np.zeros_like(alpha)
+            for i in range(self.num_elem):
+                dkdt, dkda = self.dk(self.Ex,self.Ey,self.nuxy,self.nuyz,self.Gxy,theta[i],alpha[i],self.elemvol[i])
+                ue = u[self.elmnodes[i,:],:].flatten()
+                dcidt[i] = -rho[i]**self.penal * ue.dot(dkdt.dot(ue))
+                dcida[i] = -rho[i]**self.penal * ue.dot(dkda.dot(ue))
+                
+            dcdt += self.comp_hist[lc][-1]**(self.comp_max_order-1) * dcidt
+            dcda += self.comp_hist[lc][-1]**(self.comp_max_order-1) * dcida
             
-        dcdt = np.zeros(self.num_elem)
-        dcda = np.zeros(self.num_elem)
-        for i in range(self.num_elem):
-            dkdt, dkda = self.dk(self.Ex,self.Ey,self.nuxy,self.nuyz,self.Gxy,theta[i],alpha[i],self.elemvol[i])
-            ue = u[self.elmnodes[i,:],:].flatten()
-            dcdt[i] = -rho[i]**self.penal * ue.dot(dkdt.dot(ue))
-            dcda[i] = -rho[i]**self.penal * ue.dot(dkda.dot(ue))
-        
+        dcdt *= self.comp_max_hist[-1]**(1-self.comp_max_order)
+        dcda *= self.comp_max_hist[-1]**(1-self.comp_max_order)
+
         # concatenate all sensitivities
         if self.dim == '2D' or self.dim == '3D_layer':
             dc = np.concatenate((dcdrho,dcdt))
@@ -328,7 +366,7 @@ class TopOpt():
         for filename in glob.glob(self.title + '.*'): os.remove(filename)
             
     def save(self, filename=None):
-        if filename is None: filename = self.res_dir / 'topopt.json'
+        if filename is None: filename = self.res_root / 'topopt.json'
         
         json_str = json.dumps(jsonpickle.encode(self), indent=2)
         with open(filename, 'w') as f:
@@ -344,8 +382,8 @@ class TopOpt():
         mass = rho * x.dot(self.elemvol)
         return mass
     
-    def disp_max(self):
-        u = np.loadtxt(self.res_dir/'nodal_solution_u.txt', dtype=float) # ux uy uz
+    def disp_max(self, load_case=1):
+        u = np.loadtxt(self.res_dir[load_case-1]/'nodal_solution_u.txt', dtype=float) # ux uy uz
         u = np.linalg.norm(u, axis=1)
         return np.amax(u)
     

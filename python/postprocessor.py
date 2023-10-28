@@ -15,12 +15,17 @@ class PostProcessor():
         
     def plot_convergence(self, start_iter=0, filename=None, save=True):
         plt.figure()
-        plt.plot(range(start_iter,len(self.solver.comp_hist)), self.solver.comp_hist[start_iter:])
+        
+        for lc in range(self.solver.load_cases):
+            plt.plot(range(start_iter,len(self.solver.comp_hist[lc])), self.solver.comp_hist[lc][start_iter:], label=f'Load case {lc}')
+                
+        if not self.solver.load_cases == 1:
+            plt.legend()
         plt.xlabel('Iteration')
         plt.ylabel('Compliance')
         
         if save:
-            if filename is None: filename = self.solver.res_dir / 'convergence.png'
+            if filename is None: filename = self.solver.res_root / 'convergence.png'
             plt.savefig(filename)
 
 class Post2D(PostProcessor):
@@ -30,7 +35,6 @@ class Post2D(PostProcessor):
         ax.set_aspect('equal')
         plt.xlim(np.amin(self.solver.node_coord[:,0]),np.amax(self.solver.node_coord[:,0]))
         plt.ylim(np.amin(self.solver.node_coord[:,1]),np.amax(self.solver.node_coord[:,1]))
-        plt.title('Compliance = {:.4f}'.format(self.solver.comp_hist[iteration]))
         
         x = self.solver.centers[:,0]
         y = self.solver.centers[:,1]
@@ -61,11 +65,11 @@ class Post2D(PostProcessor):
             axins.set_yticks([])
 
         if save:
-            if filename is None: filename = self.solver.res_dir / 'design.png'
+            if filename is None: filename = self.solver.res_root / 'design.png'
             plt.savefig(filename)
         
     def animate(self, filename=None, colorful=False):
-        if filename is None: filename = self.solver.res_dir / 'animation.gif'
+        if filename is None: filename = self.solver.res_root / 'animation.gif'
         fig, ax = plt.subplots(dpi=300)
         anim = FuncAnimation(fig, partial(self.plot, colorful=colorful, save=False, fig=fig, ax=ax), frames=len(self.solver.rho_hist))
         anim.save(filename)
@@ -81,7 +85,6 @@ class Post3D(PostProcessor):
         deltaz = np.amax(self.solver.node_coord[:,2]) - np.amin(self.solver.node_coord[:,2])
         ax.set_box_aspect((deltax,deltay,deltaz))            
         ax.view_init(elev=elev, azim=azim)
-        plt.title('Compliance = {:.4f}'.format(self.solver.comp_hist[iteration]))
 
         if domain_stl is not None:
             domain_mesh = mesh.Mesh.from_file(domain_stl)
@@ -105,7 +108,7 @@ class Post3D(PostProcessor):
         ax.quiver(x, y, z, u, v, w, color=color, alpha=rho, pivot='middle', arrow_length_ratio=0, linewidth=0.8, length=3)
         
         if save:
-            if filename is None: filename = self.solver.res_dir / 'design.png'
+            if filename is None: filename = self.solver.res_root / 'design.png'
             plt.savefig(filename)
         
     def plot_layer(self, iteration=-1, layer=0, colorful=False, filename=None, save=True, fig=None, ax=None, zoom=None):
@@ -114,7 +117,7 @@ class Post3D(PostProcessor):
         ax.set_aspect('equal')
         plt.xlim(np.amin(self.solver.node_coord[:,0]),np.amax(self.solver.node_coord[:,0]))
         plt.ylim(np.amin(self.solver.node_coord[:,1]),np.amax(self.solver.node_coord[:,1]))
-        plt.title('Layer {} - Compliance = {:.4f}'.format(layer, self.solver.comp_hist[iteration]))
+        plt.title('Layer {}'.format(layer))
         
         z = np.unique(self.solver.centers[:,2])[layer]
         idx = np.where(self.solver.centers[:,2] == z)[0]
@@ -148,7 +151,7 @@ class Post3D(PostProcessor):
             axins.set_yticks([])
 
         if save:
-            if filename is None: filename = self.solver.res_dir / f'design_layer{layer}.png'
+            if filename is None: filename = self.solver.res_root / f'design_layer{layer}.png'
             plt.savefig(filename)
 
     def plot_fill(self, iteration=-1, threshold=0.8, filename=None, save=True, fig=None, ax=None):
@@ -158,7 +161,6 @@ class Post3D(PostProcessor):
             ax = fig.add_axes([0,0,1,1], projection='3d')
             ax.set_box_aspect((np.amax(self.solver.node_coord[:,0]),np.amax(self.solver.node_coord[:,1]),np.amax(self.solver.node_coord[:,2])))
         ax.cla()
-        plt.title('Compliance = {:.4f}'.format(self.solver.comp_hist[iteration]))
     
         cmap = cm.get_cmap('binary')
         for elem in range(len(data)):
@@ -193,11 +195,11 @@ class Post3D(PostProcessor):
                 ax.plot_surface(x, y, z, color=c, rstride=1, cstride=1, alpha=alpha)
                 
         if save:
-            if filename is None: filename = self.solver.res_dir / 'design_fill.png'
+            if filename is None: filename = self.solver.res_root / 'design_fill.png'
             plt.savefig(filename)
         
     def animate(self, filename=None, colorful=True, elev=None, azim=None):
-        if filename is None: filename = self.solver.res_dir / 'animation.gif'
+        if filename is None: filename = self.solver.res_root / 'animation.gif'
         
         fig = plt.figure(dpi=500)
         ax = fig.add_axes([0,0,1,1], projection='3d')
@@ -205,7 +207,7 @@ class Post3D(PostProcessor):
         anim.save(filename)
         
     def animate_layer(self, layer, colorful=False, filename=None):
-        if filename is None: filename = self.solver.res_dir / f'animation_layer{layer}.gif'
+        if filename is None: filename = self.solver.res_root / f'animation_layer{layer}.gif'
         fig, ax = plt.subplots(dpi=300)
         anim = FuncAnimation(fig, partial(self.plot_layer, layer=layer, colorful=colorful, save=False, fig=fig, ax=ax), frames=len(self.solver.rho_hist))
         anim.save(filename)

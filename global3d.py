@@ -55,7 +55,7 @@ for i, fiber in enumerate(fibers):
         CO2mat = (rhof*Vf*CO2f + rhom*Vm*CO2m)/rho # kgCO2/kg
 
         jobname = '_'.join([str(int(100*Vf)), fiber, matrix, str(int(100*f))])
-        solver = TopOpt(inputfile='mbb3d_fine', dim='3D', jobname=jobname,
+        solver = TopOpt(inputfiles='mbb3d_fine', dim='3D', jobname=jobname,
             Ex=Ex, Ey=Ey, nuxy=nuxy, nuyz=num, Gxy=Gxy, volfrac=f, r_rho=4, r_theta=10, max_iter=80, echo=False)
         solver.optim()
 
