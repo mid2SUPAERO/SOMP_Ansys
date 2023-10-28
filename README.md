@@ -10,6 +10,7 @@ The code was tested with the following libraries in Python >= 3.7:
 
 Examples may have additional dependencies:
 - mpi4py 3.0.1
+- niceplots 2.4.0
 
 ## Examples
 
