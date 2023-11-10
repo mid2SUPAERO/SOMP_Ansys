@@ -19,16 +19,18 @@ Required APDL script files:
 TopOpt2D: 4-node 2D quad, PLANE182, with KEYOPT(3) = 3 plane stress with thk
 TopOpt3D: 8-node 3D hex, SOLID185
 
-TopOpt(inputfiles, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, theta0, alpha0, move, max_iter, dim, jobname, echo):
+TopOpt(inputfiles, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, initial_angles_type, theta0, alpha0, move, max_iter, dim, jobname, echo):
     inputfiles: name of the model file (without .db). For multiple load cases, tuple with all model files
     Ex, Ey, nuxy, nuyz, Gxy: material properties
     volfrac: volume fraction constraint for the optimization
     r_rho: radius of the density filter (adjusts minimum feature size)
     r_theta: radius of the orientation filter (adjusts fiber curvature)
-    theta0: initial orientation (around z) of the fibers, in degrees. Default: random distribution
-    alpha0: initial orientation (around x) of the fibers, in degrees. Default: random distribution
+    initial_angles_type: method for setting the initial orientations: 'fix', 'noise', 'random', 'principal'. Defaults to 'fix'
+    theta0: initial orientation (around z) of the fibers, in degrees. Only needed for initial_angles_type='fix' and 'noise'
+    alpha0: initial orientation (around x) of the fibers, in degrees. Only needed for initial_angles_type='fix' and 'noise'
     move: move limit for variable updating, as a fraction of the allowed range
     max_iter: number of iterations
+    tol: stopping criterion, relative change in the objective function. Defaults at 0, i.e., will run until max_iter
     dim: optimization type, '2D', '3D_layer' or '3D_free'
     jobname: subfolder of TopOpt.res_dir to store results for this optim. Default: stores results directly on TopOpt.res_dir
     echo: boolean, print status at each iteration?
@@ -63,7 +65,7 @@ class TopOpt():
         TopOpt.res_dir    = res_dir
         TopOpt.mod_dir    = mod_dir
     
-    def __init__(self, inputfiles, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho=0, r_theta=0, theta0=None, alpha0=None, move=0.3, max_iter=200, dim='3D_layer', jobname=None, echo=True):
+    def __init__(self, inputfiles, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho=0, r_theta=0, initial_angles_type='fix', theta0=0, alpha0=0, move=0.3, max_iter=200, tol=0, dim='3D_layer', jobname=None, echo=True):
         self.dim  = dim
         self.echo = echo
         
@@ -89,7 +91,7 @@ class TopOpt():
             self.res_dir[lc].mkdir(parents=True, exist_ok=True)
         self.res_root = self.res_dir[0].parent
         
-        self.meshdata_cmd, self.result_cmd = self.build_apdl_scripts(inputfiles)
+        self.meshdata_cmd, self.initial_orientations_cmd, self.result_cmd = self.build_apdl_scripts(inputfiles)
         self.num_elem, self.num_node, self.centers, self.elemvol, self.elmnodes, self.node_coord = self.get_mesh_data()
     
         self.Ex   = Ex
@@ -98,19 +100,10 @@ class TopOpt():
         self.nuyz = nuyz
         self.Gxy  = Gxy
         
-        if theta0 is None:
-            # Random numbers between -pi/2 and pi/2
-            self.theta0 = np.pi * np.random.random(self.num_elem) - np.pi/2
-        else:
-            self.theta0 = np.deg2rad(theta0)
-            
-        if alpha0 is None:
-            # Random numbers between -pi/2 and pi/2
-            self.alpha0 = np.pi * np.random.random(self.num_elem) - np.pi/2
-        else:
-            self.alpha0 = np.deg2rad(alpha0)
+        self.theta0, self.alpha0 = self.initial_orientations(initial_angles_type, theta0, alpha0)
         
         self.max_iter   = max_iter
+        self.tol        = tol
         self.rho_min    = 1e-3
         self.penal      = 3
         self.volfrac    = volfrac
@@ -125,6 +118,8 @@ class TopOpt():
         self.fea_time   = 0
         self.deriv_time = 0
         self.mma        = self.create_optimizer()
+        
+        self.clear_files()
     
     def build_apdl_scripts(self, inputfiles):
         self.title = inputfiles[0] if self.jobname is None else self.jobname
@@ -141,7 +136,19 @@ class TopOpt():
         meshdata_cmd = [TopOpt.ANSYS_path, '-b', '-i', self.res_root/'ansys_meshdata.txt', '-o', self.res_root/'meshdata.out', '-smp']
         if self.jobname is not None:
             meshdata_cmd += ['-j', self.title]
-        
+            
+        # initial orientations script
+        with open(self.res_root/'ansys_initial_orientations.txt', 'w') as f:
+            f.write(f"RESUME,'{inputfiles[0]}','db','{TopOpt.mod_dir}',0,0\n")
+            f.write(f"/CWD,'{self.res_root}'\n")
+            f.write(f"/FILENAME,{self.title},1\n")
+            f.write(f"/TITLE,{self.title}\n")
+            f.write(open(TopOpt.script_dir/'ansys_initial_orientations.txt').read())
+            
+        initial_orientations_cmd = [TopOpt.ANSYS_path, '-b', '-i', self.res_root/'ansys_initial_orientations.txt', '-o', self.res_root/'orientations.out', '-smp']
+        if self.jobname is not None:
+            initial_orientations_cmd += ['-j', self.title]
+            
         # solve scripts
         result_cmd = []
         for lc, inputfile in enumerate(inputfiles):
@@ -157,7 +164,7 @@ class TopOpt():
                 cmd += ['-j', self.title]
             result_cmd.append(cmd)
             
-        return meshdata_cmd, result_cmd
+        return meshdata_cmd, initial_orientations_cmd, result_cmd
     
     def get_mesh_data(self):
         subprocess.run(self.meshdata_cmd)
@@ -170,6 +177,34 @@ class TopOpt():
         
         return num_elem, num_node, centers, elmvol, elmnodes, node_coord
     
+    def initial_orientations(self, initial_angles_type, theta0, alpha0):
+        # initial angles are given
+        if initial_angles_type == 'fix':
+            theta0 = np.deg2rad(theta0)
+            alpha0 = np.deg2rad(alpha0)
+        
+        # orientations distributed around the given values
+        elif initial_angles_type == 'noise':
+            theta0 = np.random.default_rng().normal(np.deg2rad(theta0), np.pi/10, self.num_elem)
+            alpha0 = np.random.default_rng().normal(np.deg2rad(alpha0), np.pi/10, self.num_elem)
+        
+        # random numbers between -pi/2 and pi/2
+        elif initial_angles_type == 'random':
+            theta0 = np.random.default_rng().uniform(-np.pi/2, np.pi/2, self.num_elem)
+            alpha0 = np.random.default_rng().uniform(-np.pi/2, np.pi/2, self.num_elem)
+        
+        # inital orientations are the principal directions for an isotropic base case
+        elif initial_angles_type == 'principal':
+            if self.echo: print('Calculating initial orientations...')
+            subprocess.run(self.initial_orientations_cmd)
+            angles = np.loadtxt(self.res_root/'initial_principal_angles.txt')
+
+            # initial angle for an element: average of angles on its nodes
+            theta0 = np.deg2rad(np.mean(angles[self.elmnodes,0], axis=1))
+            alpha0 = np.deg2rad(np.mean(angles[self.elmnodes,1], axis=1))
+        
+        return theta0, alpha0
+    
     def create_optimizer(self):
         rho    = self.volfrac * np.ones(self.num_elem)
         self.x = rho
@@ -181,15 +216,15 @@ class TopOpt():
         if self.dim == '2D' or self.dim == '3D_layer' or self.dim == '3D_free':
             theta  = self.theta0 * np.ones(self.num_elem)
             self.x = np.concatenate((rho,theta))
-            xmin = np.concatenate((xmin, -np.pi/2*np.ones_like(theta)))
-            xmax = np.concatenate((xmax, np.pi/2*np.ones_like(theta)))
+            xmin = np.concatenate((xmin, -np.pi*np.ones_like(theta)))
+            xmax = np.concatenate((xmax, np.pi*np.ones_like(theta)))
         
         # add alpha variable
         if self.dim == '3D_free':
             alpha = self.alpha0 * np.ones(self.num_elem)
             self.x = np.concatenate((self.x,alpha))
-            xmin = np.concatenate((xmin, -np.pi/2*np.ones_like(alpha)))
-            xmax = np.concatenate((xmax, np.pi/2*np.ones_like(alpha)))
+            xmin = np.concatenate((xmin, -np.pi*np.ones_like(alpha)))
+            xmax = np.concatenate((xmax, np.pi*np.ones_like(alpha)))
         
         mma = MMA(self.fea,self.sensitivities,self.constraint,self.dconstraint,xmin,xmax,self.move)
         
@@ -213,8 +248,6 @@ class TopOpt():
             alpha = np.zeros_like(theta)
         elif self.dim == '3D_free':
             rho, theta, alpha = np.split(x,3)
-            
-        theta, alpha = self.orientation_filter.filter(rho,theta,alpha)
         
         # Generate file with 1000 discrete materials
         rho_disc = np.linspace(0.001, 1, 1000)
@@ -229,7 +262,7 @@ class TopOpt():
             np.savetxt(self.res_dir[lc]/'materials.txt', materials, fmt=' %-.7E', newline='\n')
         
         # Generate file with material properties for each element
-        props = np.array([1000*rho, np.rad2deg(theta), np.deg2rad(alpha)]).T
+        props = np.array([1000*rho, np.rad2deg(theta), np.rad2deg(alpha)]).T
         for lc in range(self.load_cases):
             np.savetxt(self.res_dir[lc]/'elem_props.txt', props, fmt='%5d %-.7E %-.7E', newline='\n')
         
@@ -329,9 +362,13 @@ class TopOpt():
         
     def optim(self):
         t0 = time.time()
-        for _ in range(self.max_iter):
-            if self.echo: print('Iteration {:3d}... '.format(self.mma.iter), end=' ')
+        for it in range(self.max_iter):
+            if self.echo: print('Iteration {:3d}... '.format(it), end=' ')
             xnew = self.mma.iterate(self.x)
+            
+            # relative change in moving average of aggregated compliance (10 last iterations)
+            if it > 10 and np.abs((np.sum(self.comp_max_hist[-10:])-np.sum(self.comp_max_hist[-11:-1]))/np.sum(self.comp_max_hist[-11:-1])) < self.tol:
+                break
                 
             if self.dim == 'SIMP':
                 rho = xnew.copy()
@@ -351,10 +388,10 @@ class TopOpt():
                 self.x = np.concatenate((rho,theta))
             elif self.dim == '3D_free':
                 self.x = np.concatenate((rho,theta,alpha))
-                
-        # Evaluate result from last iteration
-        if self.echo: print('Iteration {:3d}... '.format(self.mma.iter), end=' ')
-        self.fea(self.x)
+        else:        
+            # Evaluate result from last iteration
+            if self.echo: print('Iteration {:3d}... '.format(self.mma.iter), end=' ')
+            self.fea(self.x)
         
         self.clear_files()
         self.time = time.time() - t0

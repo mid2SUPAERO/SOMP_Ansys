@@ -37,7 +37,7 @@ Examples may have additional dependencies:
 
 ### Class `TopOpt`
 
-- `TopOpt(inputfiles, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, theta0, alpha0, move, max_iter, dim, jobname, echo)`
+- `TopOpt(inputfiles, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, initial_angles_type, theta0, alpha0, move, max_iter, tol, dim, jobname, echo)`
   - `inputfiles`: name of the model file (without .db). For multiple load cases, tuple with all model files
   - `Ex`, `Ey`, `nuxy`, `nuyz`, `Gxy`: material properties (considered transverse isotropic, symmetry plane $yz$)
   - `volfrac`: volume fraction constraint for the optimization
@@ -45,6 +45,12 @@ Examples may have additional dependencies:
   - `r_theta`: radius of the orientation filter (adjusts fiber curvature)
   - `move`: move limit for variable updating, as a fraction of the allowed range
   - `max_iter`: number of iterations
+  - `tol`: stopping criterion, relative change in the objective function. Defaults at 0, i.e., will run until max_iter
+  - `initial_angles_type`: method for setting the initial orientations. Defaults to `'fix'`
+    - `'fix'`: initial orientations are given
+    - `'noise'`: gaussian distribution around the giuven values
+    - `'random'`: random orientation for each element
+    - `'principal'`: initial orientations follow the principal stress directions considering the whole domain with an isotropic material
   - `theta0`: initial orientation (around z) of the fibers, in degrees. Default: random distribution
   - `alpha0`: initial orientation (around x) of the fibers, in degrees. Default: random distribution
   - `dim`: optimization type
@@ -57,7 +63,7 @@ Examples may have additional dependencies:
 
 - `set_solid_elem(self, solid_elem)`: list of elements whose densities will be fixed on 1. Indexing starting at 0
 
-- `optim(self)`: runs the optimization, saves all results within the `TopOpt`object
+- `optim(self)`: runs the optimization, saves all results within the `TopOpt` object
 
 - `save(self, filename)`: saves object into a JSON file
 
