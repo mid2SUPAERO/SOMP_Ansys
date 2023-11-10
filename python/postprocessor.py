@@ -95,9 +95,21 @@ class Post3D(PostProcessor):
         z = self.solver.centers[:,2]
         theta = self.solver.theta_hist[iteration]
         alpha = self.solver.alpha_hist[iteration]
+        
+        # orientations in the printing coordinate system
         u = np.cos(alpha)*np.cos(theta)
         v = np.cos(alpha)*np.sin(theta)
         w = np.sin(alpha)
+        
+        # orientations in the global coordinate system
+        euler1, euler2 = self.solver.print_euler # rotations around z and x' respectively
+        T = np.array([[np.cos(euler1),-np.sin(euler1),0],
+                      [np.sin(euler1),np.cos(euler1),0],
+                      [0,0,1]]) @ \
+            np.array([[1,0,0],
+                      [0,np.cos(euler2),-np.sin(euler2)],
+                      [0,np.sin(euler2),np.cos(euler2)]])
+        u, v, w = np.dot(T,[u,v,w])
         
         rho = self.solver.rho_hist[iteration]
         if colorful:

@@ -19,12 +19,13 @@ Required APDL script files:
 TopOpt2D: 4-node 2D quad, PLANE182, with KEYOPT(3) = 3 plane stress with thk
 TopOpt3D: 8-node 3D hex, SOLID185
 
-TopOpt(inputfiles, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, initial_angles_type, theta0, alpha0, move, max_iter, dim, jobname, echo):
+TopOpt(inputfiles, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, print_direction, initial_angles_type, theta0, alpha0, move, max_iter, dim, jobname, echo):
     inputfiles: name of the model file (without .db). For multiple load cases, tuple with all model files
     Ex, Ey, nuxy, nuyz, Gxy: material properties
     volfrac: volume fraction constraint for the optimization
     r_rho: radius of the density filter (adjusts minimum feature size)
     r_theta: radius of the orientation filter (adjusts fiber curvature)
+    print_direction: defaults to (0.,0.,1.)
     initial_angles_type: method for setting the initial orientations: 'fix', 'noise', 'random', 'principal'. Defaults to 'fix'
     theta0: initial orientation (around z) of the fibers, in degrees. Only needed for initial_angles_type='fix' and 'noise'
     alpha0: initial orientation (around x) of the fibers, in degrees. Only needed for initial_angles_type='fix' and 'noise'
@@ -65,21 +66,13 @@ class TopOpt():
         TopOpt.res_dir    = res_dir
         TopOpt.mod_dir    = mod_dir
     
-    def __init__(self, inputfiles, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho=0, r_theta=0, initial_angles_type='fix', theta0=0, alpha0=0, move=0.3, max_iter=200, tol=0, dim='3D_layer', jobname=None, echo=True):
+    def __init__(self, inputfiles, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho=0, r_theta=0, print_direction=(0.,0.,1.), initial_angles_type='fix', theta0=0, alpha0=0, move=0.3, max_iter=200, tol=0, dim='3D_layer', jobname=None, echo=True):
         self.dim  = dim
         self.echo = echo
         
         if isinstance(inputfiles,str): inputfiles = (inputfiles,)
         self.load_cases     = len(inputfiles)
         self.comp_max_order = 8               # using 8-norm as a differentiable max function of all compliances
-
-        # dkdt, dkda = dk(Ex,Ey,nuxy,nuyz,Gxy,theta,alpha,elmvol)
-        if dim == '2D':
-            self.dk = dk2d
-        elif dim == '3D_layer':
-            self.dk = dk3d
-        elif dim == '3D_free':
-            self.dk = dk3d
         
         self.jobname = jobname     
         self.res_dir = []
@@ -100,7 +93,17 @@ class TopOpt():
         self.nuyz = nuyz
         self.Gxy  = Gxy
         
-        self.theta0, self.alpha0 = self.initial_orientations(initial_angles_type, theta0, alpha0)
+        self.print_direction, self.print_euler = self.set_print_direction(print_direction)
+        self.theta0, self.alpha0               = self.initial_orientations(initial_angles_type, theta0, alpha0)
+        
+        # sensitivities
+        # dkdt, dkda = dk(Ex,Ey,nuxy,nuyz,Gxy,theta,alpha,elmvol)
+        if dim == '2D':
+            self.dk = dk2d
+        elif dim == '3D_layer':
+            self.dk = lambda Ex,Ey,nuxy,nuyz,Gxy,T,A,V: dk3d(Ex,Ey,nuxy,nuyz,Gxy,T,A,V,self.print_euler)
+        elif dim == '3D_free':
+            self.dk = lambda Ex,Ey,nuxy,nuyz,Gxy,T,A,V: dk3d(Ex,Ey,nuxy,nuyz,Gxy,T,A,V,self.print_euler)
         
         self.max_iter   = max_iter
         self.tol        = tol
@@ -176,6 +179,16 @@ class TopOpt():
         node_coord         = np.loadtxt(self.res_root/'node_coordinates.txt') # x y z
         
         return num_elem, num_node, centers, elmvol, elmnodes, node_coord
+    
+    def set_print_direction(self, print_direction):
+        x, y, z = print_direction
+        euler1 = -np.arctan2(x,y) # -arctan(x/y), around z
+        euler2  = -np.arctan2(np.hypot(x,y),z) # -arctan(sqrt(x^2+y^2)/z), around x'
+        euler = np.array([euler1, euler2]).T
+        for lc in range(self.load_cases):
+            np.savetxt(self.res_dir[lc]/'print_direction.txt', np.rad2deg(euler), fmt=' %-.7E', newline='\n')
+        
+        return print_direction, euler
     
     def initial_orientations(self, initial_angles_type, theta0, alpha0):
         # initial angles are given

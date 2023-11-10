@@ -43,6 +43,7 @@ Examples may have additional dependencies:
   - `volfrac`: volume fraction constraint for the optimization
   - `r_rho`: radius of the density filter (adjusts minimum feature size)
   - `r_theta`: radius of the orientation filter (adjusts fiber curvature)
+  - `print_direction`: defaults to `(0.,0.,1.)`
   - `move`: move limit for variable updating, as a fraction of the allowed range
   - `max_iter`: number of iterations
   - `tol`: stopping criterion, relative change in the objective function. Defaults at 0, i.e., will run until max_iter
