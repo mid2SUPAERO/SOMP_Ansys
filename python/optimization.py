@@ -95,6 +95,7 @@ class TopOpt():
         
         self.print_direction, self.print_euler = self.set_print_direction(print_direction)
         self.theta0, self.alpha0               = self.initial_orientations(initial_angles_type, theta0, alpha0)
+        self.layers                            = self.slice_layers()
         
         # sensitivities
         # dkdt, dkda = dk(Ex,Ey,nuxy,nuyz,Gxy,theta,alpha,elmvol)
@@ -188,7 +189,23 @@ class TopOpt():
         for lc in range(self.load_cases):
             np.savetxt(self.res_dir[lc]/'print_direction.txt', np.rad2deg(euler), fmt=' %-.7E', newline='\n')
         
+        print_direction = np.array(print_direction)
+        print_direction /= np.linalg.norm(print_direction)
+        
         return print_direction, euler
+    
+    def slice_layers(self):
+        # thickness: approximately mean element edge length
+        thk = np.mean(np.cbrt(self.elemvol))
+        
+        elm_height = np.dot(self.centers, self.print_direction)
+        elm_layer = (elm_height/thk).astype(int)
+        
+        layers = [[] for _ in range(np.amax(elm_layer)+1)]
+        for i in range(self.num_elem):
+            layers[elm_layer[i]].append(i)
+            
+        return layers
     
     def initial_orientations(self, initial_angles_type, theta0, alpha0):
         # initial angles are given

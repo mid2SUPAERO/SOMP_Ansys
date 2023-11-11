@@ -32,8 +32,8 @@ Examples may have additional dependencies:
 
 ### Model files
 
-- For 2D optimization: use 4-node 2D quad elements (PLANE182) in a rectangular domain, with KEYOPT(3) = 3 (plane stress with thk)
-- For 3D optimization: use 8-node 3D hex elements (SOLID185) in a cuboid domain
+- For 2D optimization: use 4-node 2D quad elements (PLANE182), with KEYOPT(3) = 3 (plane stress with thk)
+- For 3D optimization: use 8-node 3D hex elements (SOLID185)
 
 ### Class `TopOpt`
 
@@ -45,7 +45,7 @@ Examples may have additional dependencies:
   - `r_theta`: radius of the orientation filter (adjusts fiber curvature)
   - `print_direction`: defaults to `(0.,0.,1.)`
   - `move`: move limit for variable updating, as a fraction of the allowed range
-  - `max_iter`: number of iterations
+  - `max_iter`: maximum number of iterations
   - `tol`: stopping criterion, relative change in the objective function. Defaults at 0, i.e., will run until max_iter
   - `initial_angles_type`: method for setting the initial orientations. Defaults to `'fix'`
     - `'fix'`: initial orientations are given
@@ -88,3 +88,4 @@ Examples may have additional dependencies:
 - `animate(self, filename=None, colorful=True, elev=None, azim=None)`: creates an animation with `self.plot` history
 - `plot_layer(self, iteration=-1, layer=0, colorful=False, filename=None, save=True, fig=None, ax=None, zoom=None)`: only for `dim = '3D_layer'`. Plots layer `layer` as a 2D plot, easier to visualise
 - `animate_layer(self, layer, colorful=False, filename=None)`: creates an animation with `self.plot_layer` history
+- `animate_print(self, colorful=False, filename=None)`: creates an animation with the orientations in each layer
