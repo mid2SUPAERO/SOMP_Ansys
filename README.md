@@ -37,7 +37,7 @@ Examples may have additional dependencies:
 
 ### Class `TopOpt`
 
-- `TopOpt(inputfiles, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, initial_angles_type, theta0, alpha0, move, max_iter, tol, dim, jobname, echo)`
+- `TopOpt(inputfiles, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, print_direction, initial_angles_type, theta0, alpha0, move, max_iter, tol, dim, jobname, echo)`
   - `inputfiles`: name of the model file (without .db). For multiple load cases, tuple with all model files
   - `Ex`, `Ey`, `nuxy`, `nuyz`, `Gxy`: material properties (considered transverse isotropic, symmetry plane $yz$)
   - `volfrac`: volume fraction constraint for the optimization
@@ -52,12 +52,12 @@ Examples may have additional dependencies:
     - `'noise'`: gaussian distribution around the giuven values
     - `'random'`: random orientation for each element
     - `'principal'`: initial orientations follow the principal stress directions considering the whole domain with an isotropic material
-  - `theta0`: initial orientation (around z) of the fibers, in degrees. Default: random distribution
-  - `alpha0`: initial orientation (around x) of the fibers, in degrees. Default: random distribution
+  - `theta0`: initial orientation (around z) of the fibers, in degrees. Default: `0.0`
+  - `alpha0`: initial orientation (around x) of the fibers, in degrees. Default: `0.0`
   - `dim`: optimization type
     - `'SIMP'`: SIMP method, 2D or 3D optimization
     - `'2D'`: 2D optimization
-    - `'3D_layer'`: 3D optimization, structure will be printed in layers and fibers can rotate in the plane $xy$
+    - `'3D_layer'`: 3D optimization, structure will be printed in layers and fibers can rotate in the plane $xy$ (defined by the normal vector `print_direction`)
     - `'3D_free'`: 3D optimization, fiber orientations defined by rotations around $z$ and $x$ respectively
   - `jobname`: optional. Subfolder of `TopOpt.res_dir` to store results for this optim. Default: no subfolder, stores results directly on `TopOpt.res_dir`
   - `echo`: boolean. Print compliance at each iteration?
