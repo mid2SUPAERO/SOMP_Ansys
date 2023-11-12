@@ -19,17 +19,17 @@ Required APDL script files:
 TopOpt2D: 4-node 2D quad, PLANE182, with KEYOPT(3) = 3 plane stress with thk
 TopOpt3D: 8-node 3D hex, SOLID185
 
-TopOpt(inputfiles, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, print_direction, initial_angles_type, theta0, alpha0, move, max_iter, dim, jobname, echo):
+TopOpt(inputfiles, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho, r_theta, print_direction, overhang_angle, initial_angles_type, theta0, alpha0, move, max_iter, dim, jobname, echo):
     inputfiles: name of the model file (without .db). For multiple load cases, tuple with all model files
     Ex, Ey, nuxy, nuyz, Gxy: material properties
     volfrac: volume fraction constraint for the optimization
     r_rho: radius of the density filter (adjusts minimum feature size)
     r_theta: radius of the orientation filter (adjusts fiber curvature)
     print_direction: defaults to (0.,0.,1.)
+    overhang_angle: minimum self-supporting angle measured from the horizontal, in degrees 
     initial_angles_type: method for setting the initial orientations: 'fix', 'noise', 'random', 'principal'. Defaults to 'fix'
     theta0: initial orientation (around z) of the fibers, in degrees. Only needed for initial_angles_type='fix' and 'noise'
     alpha0: initial orientation (around x) of the fibers, in degrees. Only needed for initial_angles_type='fix' and 'noise'
-    move: move limit for variable updating, as a fraction of the allowed range
     max_iter: number of iterations
     tol: stopping criterion, relative change in the objective function. Defaults at 0, i.e., will run until max_iter
     dim: optimization type, '2D', '3D_layer' or '3D_free'
@@ -66,9 +66,24 @@ class TopOpt():
         TopOpt.res_dir    = res_dir
         TopOpt.mod_dir    = mod_dir
     
-    def __init__(self, inputfiles, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho=0, r_theta=0, print_direction=(0.,0.,1.), initial_angles_type='fix', theta0=0, alpha0=0, move=0.3, max_iter=200, tol=0, dim='3D_layer', jobname=None, echo=True):
-        self.dim  = dim
-        self.echo = echo
+    def __init__(self, inputfiles, Ex, Ey, nuxy, nuyz, Gxy, volfrac, r_rho=0, r_theta=0, print_direction=(0.,0.,1.), overhang_angle=45, initial_angles_type='fix', theta0=0, alpha0=0, max_iter=200, tol=0, dim='3D_layer', jobname=None, echo=True):
+        self.max_iter   = max_iter
+        self.tol        = tol
+        self.rho_min    = 1e-3
+        self.penal      = 3
+        self.volfrac    = volfrac
+        self.r_rho      = r_rho
+        self.r_theta    = r_theta
+        self.move       = 0.2
+        self.dim        = dim
+        self.echo       = echo
+        self.solid_elem = []
+        
+        self.Ex         = Ex
+        self.Ey         = Ey
+        self.nuxy       = nuxy
+        self.nuyz       = nuyz
+        self.Gxy        = Gxy
         
         if isinstance(inputfiles,str): inputfiles = (inputfiles,)
         self.load_cases     = len(inputfiles)
@@ -86,16 +101,13 @@ class TopOpt():
         
         self.meshdata_cmd, self.initial_orientations_cmd, self.result_cmd = self.build_apdl_scripts(inputfiles)
         self.num_elem, self.num_node, self.centers, self.elemvol, self.elmnodes, self.node_coord = self.get_mesh_data()
-    
-        self.Ex   = Ex
-        self.Ey   = Ey
-        self.nuxy = nuxy
-        self.nuyz = nuyz
-        self.Gxy  = Gxy
         
         self.print_direction, self.print_euler = self.set_print_direction(print_direction)
         self.theta0, self.alpha0               = self.initial_orientations(initial_angles_type, theta0, alpha0)
-        self.layers                            = self.slice_layers()
+        self.layers, self.layers_thk           = self.slice_layers()
+        
+        self.overhang_angle                    = np.deg2rad(overhang_angle)
+        self.overhang_support_neighborhood     = self.get_overhang_support_neighborhood()
         
         # sensitivities
         # dkdt, dkda = dk(Ex,Ey,nuxy,nuyz,Gxy,theta,alpha,elmvol)
@@ -105,16 +117,6 @@ class TopOpt():
             self.dk = lambda Ex,Ey,nuxy,nuyz,Gxy,T,A,V: dk3d(Ex,Ey,nuxy,nuyz,Gxy,T,A,V,self.print_euler)
         elif dim == '3D_free':
             self.dk = lambda Ex,Ey,nuxy,nuyz,Gxy,T,A,V: dk3d(Ex,Ey,nuxy,nuyz,Gxy,T,A,V,self.print_euler)
-        
-        self.max_iter   = max_iter
-        self.tol        = tol
-        self.rho_min    = 1e-3
-        self.penal      = 3
-        self.volfrac    = volfrac
-        self.r_rho      = r_rho
-        self.r_theta    = r_theta
-        self.move       = move
-        self.solid_elem = []
         
         self.density_filter     = DensityFilter(self.r_rho, self.centers)
         self.orientation_filter = OrientationFilter(self.r_theta, self.centers)
@@ -205,7 +207,7 @@ class TopOpt():
         for i in range(self.num_elem):
             layers[elm_layer[i]].append(i)
             
-        return layers
+        return layers, thk
     
     def initial_orientations(self, initial_angles_type, theta0, alpha0):
         # initial angles are given
@@ -423,6 +425,9 @@ class TopOpt():
             if self.echo: print('Iteration {:3d}... '.format(self.mma.iter), end=' ')
             self.fea(self.x)
         
+        if self.echo: print()
+        self.print_score, self.elm_printability = self.printability()
+        
         self.clear_files()
         self.time = time.time() - t0
         return self.x
@@ -443,6 +448,63 @@ class TopOpt():
         with open(filename, 'r') as f:
             data = json.load(f)
         return jsonpickle.decode(data)
+    
+    def get_overhang_support_neighborhood(self):
+        r_s  = 1.5*self.r_rho # radius of the neighborhood set
+        neighborhood = [[] for _ in range(self.num_elem)]
+        
+        def distances(matrixA, matrixB):
+            A = np.matrix(matrixA)
+            B = np.matrix(matrixB)
+            Btrans = B.transpose()
+            vecProd = A * Btrans
+            SqA =  A.getA()**2
+            sumSqA = np.matrix(np.sum(SqA, axis=1))
+            sumSqAEx = np.tile(sumSqA.transpose(), (1, vecProd.shape[1]))    
+            SqB = B.getA()**2
+            sumSqB = np.sum(SqB, axis=1)
+            sumSqBEx = np.tile(sumSqB, (vecProd.shape[0], 1))    
+            SqED = sumSqBEx + sumSqAEx - 2*vecProd   
+            elmDis = (np.maximum(0,SqED).getA())**0.5
+            return np.matrix(elmDis)
+        
+        for ei in range(self.num_elem):
+            ii = np.where(abs(self.centers[:,0] - self.centers[ei][0]) < r_s)[0]
+            jj = np.where(abs(self.centers[ii,1] - self.centers[ei][1]) < r_s)[0]
+            kk = np.where(abs(self.centers[ii[jj],2] - self.centers[ei][2]) < r_s)[0]
+            ll = np.where(np.logical_not(ii[jj][kk] == ei))[0]
+            
+            v_ij = self.centers[ii[jj][kk][ll]] - self.centers[ei]
+            d = distances(self.centers[ei],self.centers[ii[jj][kk][ll]])
+            v_ij = (v_ij.T/d).T
+            angles = np.arccos(v_ij @ -self.print_direction)
+            
+            mm = np.where(angles <= np.pi/2 - self.overhang_angle)[0]
+            neighborhood[ei] = ii[jj][kk][ll][mm]
+                        
+        return neighborhood
+    
+    def printability(self):
+        x    = np.copy(self.rho_hist[-1])
+        beta = 25 # thresholding Heaviside parameter
+        h    = np.mean(np.cbrt(self.elemvol)) # finite element size
+        r_s  = 1.5*self.r_rho # radius of the neighborhood set
+        T    = 1/(np.pi/2-self.overhang_angle) * h/(2*r_s)
+        
+        rho_s = np.ones_like(x)
+        for layeri in self.layers[1:]:
+            for eli in layeri:
+                neighbors = self.overhang_support_neighborhood[eli]
+                mu_s = np.mean(x[neighbors]) if len(neighbors) > 0 else 0
+                rho_s[eli] = (np.tanh(beta*T) + np.tanh(beta*(mu_s-T)))/(np.tanh(beta*T) + np.tanh(beta*(1-T)))
+                x[eli] *= rho_s[eli] # unsupported element cannot support above elements
+        
+        score = np.average(rho_s, weights=self.rho_hist[-1])
+        elm_printability = rho_s > 0.5
+        
+        if self.echo: print('Printability score = {:.3f}'.format(score))
+        
+        return score, elm_printability
     
     def mass(self, rho):
         x = self.rho_hist[-1]

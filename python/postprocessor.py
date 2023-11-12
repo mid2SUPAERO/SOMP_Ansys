@@ -76,7 +76,7 @@ class Post2D(PostProcessor):
         anim.save(filename)
 
 class Post3D(PostProcessor):
-    def plot(self, iteration=-1, colorful=True, elev=None, azim=None, domain_stl=None, filename=None, save=True, fig=None, ax=None):
+    def plot(self, iteration=-1, colorful=True, printability=False, elev=None, azim=None, domain_stl=None, filename=None, save=True, fig=None, ax=None):
         if ax is None:
             fig = plt.figure(dpi=500)
             ax = fig.add_axes([0,0,1,1], projection='3d')
@@ -113,17 +113,20 @@ class Post3D(PostProcessor):
         u, v, w = np.dot(T,[u,v,w])
         
         rho = self.solver.rho_hist[iteration]
-        if colorful:
+        if printability:
+            color = ['black' if printable else 'red' for printable in self.solver.elm_printability]
+        elif colorful:
             color = [(np.abs(w[i]),np.abs(u[i]),np.abs(v[i])) for i in range(len(u))]
         else:
-            color = 'black'
+            color = 'black'     
+            
         ax.quiver(x, y, z, u, v, w, color=color, alpha=rho, pivot='middle', arrow_length_ratio=0, linewidth=0.8, length=1/self.quiver_scale)
         
         if save:
             if filename is None: filename = self.solver.res_root / 'design.png'
             plt.savefig(filename)
         
-    def plot_layer(self, iteration=-1, layer=0, colorful=False, filename=None, save=True, fig=None, ax=None, zoom=None):
+    def plot_layer(self, iteration=-1, layer=0, colorful=False, printability=False, filename=None, save=True, fig=None, ax=None, zoom=None):
         if fig is None: fig, ax = plt.subplots(dpi=300)
                 
         idx = self.solver.layers[layer]
@@ -152,7 +155,9 @@ class Post3D(PostProcessor):
         u = np.cos(theta)
         v = np.sin(theta)
         
-        if colorful:
+        if printability:
+            color = ['black' if printable else 'red' for printable in self.solver.elm_printability[idx]]
+        elif colorful:
             color = [(0,np.abs(u[i]),np.abs(v[i])) for i in range(len(u))]
         else:
             color = 'black'
@@ -235,8 +240,8 @@ class Post3D(PostProcessor):
         anim = FuncAnimation(fig, partial(self.plot_layer, layer=layer, colorful=colorful, save=False, fig=fig, ax=ax), frames=len(self.solver.rho_hist))
         anim.save(filename)
         
-    def animate_print(self, colorful=False, filename=None):
+    def animate_print(self, colorful=False, printability=False, filename=None):
         if filename is None: filename = self.solver.res_root / 'animation_print.gif'
         fig, ax = plt.subplots(dpi=300)
-        anim = FuncAnimation(fig, lambda layer: self.plot_layer(iteration=-1, layer=layer, colorful=colorful, save=False, fig=fig, ax=ax), frames=len(self.solver.layers))
+        anim = FuncAnimation(fig, lambda layer: self.plot_layer(iteration=-1, layer=layer, colorful=colorful, printability=printability, save=False, fig=fig, ax=ax), frames=len(self.solver.layers))
         anim.save(filename)
