@@ -242,8 +242,6 @@ class TopOpt():
             if self.echo: print('Iteration {:3d}... '.format(it), end=' ')
             xnew = self.mma.iterate(self.x)
             
-#             # relative change in moving average of aggregated compliance (10 last iterations)
-#             if it >= 10 and np.abs((np.sum(self.comp_max_hist[-10:])-np.sum(self.comp_max_hist[-11:-1]))/np.sum(self.comp_max_hist[-11:-1])) < self.tol:
             if it >= 1 and np.abs(self.comp_max_hist[-1]-self.comp_max_hist[-2])/self.comp_max_hist[-2] < self.tol:
                 if not self.continuation:
                     break

@@ -14,7 +14,7 @@ volfrac = [0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55]
 comp = [[] for _ in volfrac]
 co2 = [[] for _ in volfrac]
 
-with open('results/natural.out') as f:
+with open('examples/plots_natural.out') as f:
     lines = f.readlines()
     for i in range(len(lines)//11): # 11 lines per material
         names.append(lines[11*i].strip())
@@ -22,7 +22,7 @@ with open('results/natural.out') as f:
             comp[j].append(float(lines[11*i+j+2].split()[1]))
             co2[j].append(float(lines[11*i+j+2].split()[3]))
 
-with open('results/carbon_glass.out') as f:
+with open('examples/plots_carbon_glass.out') as f:
     lines = f.readlines()
     for i in range(len(lines)//11): # 11 lines per material
         names.append(lines[11*i].strip())
