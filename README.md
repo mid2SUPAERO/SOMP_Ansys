@@ -29,7 +29,7 @@ Examples may have additional dependencies:
 
 Minimal example of an optimization of the model `models/mbb3d.db` made of bamboo and cellulose with a volume fraction of 0.3. Results are saved in the folder `results/`
 
-All functions available are presented in the next sections
+The next sections present all available functions
 
 ```
 from optim import TopOpt, Post2D, Post3D
@@ -254,4 +254,4 @@ For 3D optimizations: `Post3D(solver)`
 
 - `plot_fill(iteration=-1, threshold=0.8, filename=None, save=True, fig=None, ax=None)`
 
-  Plots each eleemnt with density greater than `threshold` as a box. Not efficient, makes a plot of every face of every eleemt
+  Plots each eleemnt with density greater than `threshold` as a box. Not efficient, makes a plot of every face of every element
