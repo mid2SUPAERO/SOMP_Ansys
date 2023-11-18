@@ -45,7 +45,6 @@ else:
     solver.set_initial_conditions('random')
 
 solver.set_optim_options(max_iter=100)
-solver.create_optimizer()
 solver.run()
 
 print()

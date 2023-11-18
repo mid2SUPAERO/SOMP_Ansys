@@ -15,8 +15,8 @@ Examples may have additional dependencies:
 ## Examples
 
 - `SimpleExample.ipynb`: Jupyter notebook with an example of 2D and 3D optimizations
-- `global3d.py`: example of a complete 3D optimization. Uses MPI to launch parallel processes with different volume fraction constraints and materials. Results in `examples/carbon_glass.out` and `examples/natural.out`, visualized in `plots.py`
-- `NaturalFibres.ipynb`: Jupyter notebook comparing different materials
+- `global3d.py`: example of a complete 3D optimization. Launches multiple optimizations with different materials. Results in `examples/global3d.out`, visualized in `global3d_plots.py`
+- `NaturalFibers.ipynb`: Jupyter notebook comparing different materials
 - `bridge.py`: example of a complete 2D optimization. Uses MPI to launch parallel processes with different initial orientations
 - `Bracket.ipynb`: Jupyter notebook with a more complex 3D optimization
 
@@ -54,7 +54,6 @@ solver.set_material(Ex=Ex, Ey=Ey, nuxy=nuxy, nuyz=nuxy, Gxy=Gxy)
 solver.set_volfrac(0.3)
 solver.set_filters(r_rho=8, r_theta=20)
 solver.set_initial_conditions('random')
-solver.create_optimizer()
 
 # ---------------------- Run and save ---------------------
 solver.run()
@@ -125,9 +124,9 @@ All setter functions are optional, the optimization can be performed with the de
   - `overhang_angle`: minimum self-supporting angle. Minimum angle with respect to the horizontal at which features may be created
   - `overhang_constraint`: add overhang constraint to the optimization? Results in self-supported structures
 
-- `set_initial_conditions(initial_angles_type='random', theta0=0, alpha0=0)`
+- `set_initial_conditions(angle_type='random', theta0=0, alpha0=0)`
 
-  - `initial_angles_type`: method for setting the initial orientations
+  - `angle_type`: method for setting the initial orientations
     - `'fix'`: initial orientations are given
     - `'noise'`: gaussian distribution around the given values
     - `'random'`: random orientation for each element
@@ -148,10 +147,6 @@ All setter functions are optional, the optimization can be performed with the de
 
 ### Run the optimization
 
-- `create_optimizer()`
-
-  Gathers all settings and creates the variable updating scheme. Has to be called before running the optimization
-
 - `run()`
 
   Runs the optimization, saves all results within the `TopOpt` object
@@ -163,10 +158,6 @@ All setter functions are optional, the optimization can be performed with the de
   - time spent solving the finite element model
   - time spent calculating sensitivities
   - time spent updating variables
-
-- `clear_files()`
-
-  Deletes temporary Ansys files related to this optimization. It is automatically called inside `run()`
 
 - `save(filename=None)`
 

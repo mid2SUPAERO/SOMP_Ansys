@@ -3,11 +3,12 @@ path = os.path.abspath(os.path.dirname(__file__).join('.'))
 if path not in sys.path:
     sys.path.append(path)
 
-from mpi4py import MPI
-
 from pathlib import Path
 import numpy as np
+
 import matplotlib.pyplot as plt
+import niceplots
+plt.style.use(niceplots.get_style())
 
 from optim import TopOpt, Post3D
 
@@ -39,60 +40,36 @@ matrices  = [cellulose, pla, petg, epoxy, polyester]
 
 CO2veh = 1030 * 25 * 3.83 # kg_fuel/kg_transported/year * years * kgCO2/kg_fuel = kgCO2/kg
 
-volfrac = [0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55]
-Vfiber  = [0.25, 0.5]
-
-t0 = MPI.Wtime()
-
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
-size = comm.Get_size()
-
+print('-'*(21*7+1))
+print(('|{:^20}'*7+'|').format('Fiber','Matrix','Compliance (N.mm)','Mass (g)','CO2 (kgCO2)','Iter','Time (s)'))
+print('-'*(21*7+1))
 for name_f, fiber in zip(names_f, fibers):
-    for name_m, matrix in zip(anmes_m, matrices):
-        f = volfrac[rank//2]
+    for name_m, matrix in zip(names_m, matrices):
+        Ex, Ey, nuxy, nuyz, Gxy, rho, CO2mat = TopOpt.rule_mixtures(fiber=fiber, matrix=matrix, Vfiber=0.5)
 
-        Vf = Vfiber[rank%2]
-        Ex, Ey, nuxy, nuyz, Gxy, rho, CO2mat = TopOpt.rule_mixtures(fiber=fiber, matrix=matrix, Vfiber=Vf)
-
-        jobname = '_'.join([str(int(100*Vf)), fiber, matrix, str(int(100*f))])
-        solver = TopOpt(inputfiles='mbb3d_fine', dim='3D_layer', jobname=jobname, echo=False)
+        jobname = '_'.join([name_f, name_m])
+        solver = TopOpt(inputfiles='mbb3d', dim='3D_layer', jobname=jobname, echo=False)
         solver.set_material(Ex=Ex, Ey=Ey, nuxy=nuxy, nuyz=nuxy, Gxy=Gxy)
-        solver.set_volfrac(f)
-        solver.set_filters(r_rho=4, r_theta=10)
+        solver.set_volfrac(0.3)
+        solver.set_filters(r_rho=8, r_theta=20)
         solver.set_initial_conditions('random')
-        solver.set_optim_options(max_iter=80)
-        solver.create_optimizer()
+        solver.set_optim_options(max_iter=150, tol=1e-3, continuation=True)
         solver.run()
+        solver.save()
 
         post = Post3D(solver)
         post.plot_convergence()
         post.plot_layer(layer=0)
         post.plot_layer(layer=1)
-        post.plot_layer(layer=2)
-        post.plot_layer(layer=3)
         post.plot(colorful=False)
-
         plt.close('all')
 
-        comp      = comm.gather(solver.comp_hist[-1])
-        dt        = comm.gather(solver.time)
-        footprint = comm.gather(1000 * solver.get_CO2_footprint(rho, CO2mat, CO2veh))
+        comp = solver.comp_max_hist[-1]
+        mass = 1e6 * solver.get_mass(rho)
+        co2  = 1e3 * solver.get_CO2_footprint(rho, CO2mat, CO2veh)
+        iter = solver.mma.iter
+        t    = solver.time
 
-        if rank == 0:
-            print()
-            print('0.25 {} and {}'.format(name_f, name_m))
-            print('volfrac    comp    time     CO2')
-            for k in range(0,size,2):
-                print('{:7.2f} {:7.2f} {:7.2f} {:7.2f}'.format(volfrac[k//2],comp[k],dt[k],footprint[k]))
+        print(('|{:^20}|{:^20}|{:^20.3f}|{:^20.3f}|{:^20.3f}|{:^20}|{:^20.2f}|').format(name_f,name_m,comp,mass,co2,iter,t))
 
-            print()
-            print('0.5 {} and {}'.format(name_f, name_m))
-            print('volfrac    comp    time     CO2')
-            for k in range(1,size,2):
-                print('{:7.2f} {:7.2f} {:7.2f} {:7.2f}'.format(volfrac[k//2],comp[k],dt[k],footprint[k]))
-            
-        comm.Barrier()
-
-if rank == 0:
-    print('Total elapsed time: {:.2f}s'.format(MPI.Wtime()-t0))
+print('-'*(21*7+1))

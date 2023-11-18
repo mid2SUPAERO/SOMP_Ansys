@@ -11,7 +11,7 @@ from .mma import MMA
 
 # Starting point: https://github.com/pep-pig/Topology-optimization-of-structure-via-simp-method
 class TopOpt():
-    def rule_mixtures(fiber, matrix, Vfiber):
+    def rule_mixtures(*, fiber, matrix, Vfiber):
         rhofiber  = fiber['rho']
         Efiber    = fiber['E']
         vfiber    = fiber['v']
@@ -45,7 +45,7 @@ class TopOpt():
         TopOpt.mod_dir    = mod_dir    # folder with the .db file (geometry, mesh, constraints, loads)
         TopOpt.script_dir = Path(os.path.abspath(os.path.dirname(__file__)))
     
-    def __init__(self, inputfiles, dim='3D_layer', jobname=None, echo=True):
+    def __init__(self, *, inputfiles, dim='3D_layer', jobname=None, echo=True):
         try: TopOpt.ANSYS_path
         except AttributeError: raise Exception('TopOpt object creation failed. Define paths with TopOpt.set_paths()') from None
         
@@ -82,18 +82,21 @@ class TopOpt():
         self.set_initial_conditions()
         self.set_optim_options()
         
-    def set_material(self, Ex=1, Ey=1, nuxy=0.3, nuyz=0.3, Gxy=1/(2*(1+0.3))):
+    def set_material(self, *, Ex=1, Ey=1, nuxy=0.3, nuyz=0.3, Gxy=1/(2*(1+0.3))):
         self.Ex   = Ex
         self.Ey   = Ey
         self.nuxy = nuxy
         self.nuyz = nuyz
         self.Gxy  = Gxy
         
+        # update derivative function (dependent on material)
+        self.dk = self.__get_dk()
+        
     def set_volfrac(self, volfrac=0.3):
         self.rho_min = 1e-3
         self.volfrac = volfrac
         
-    def set_filters(self, r_rho=0, r_theta=0):
+    def set_filters(self, *, r_rho=0, r_theta=0):
         self.r_rho          = r_rho
         self.density_filter = DensityFilter(r_rho, self.centers)
         
@@ -103,7 +106,7 @@ class TopOpt():
     def set_solid_elem(self, solid_elem=[]):
         self.solid_elem = solid_elem
             
-    def set_print_direction(self, print_direction=(0.,0.,1.), overhang_angle=45, overhang_constraint=False):
+    def set_print_direction(self, *, print_direction=(0.,0.,1.), overhang_angle=45, overhang_constraint=False):
         # normalize print_direction
         print_direction = np.array(print_direction)
         print_direction /= np.linalg.norm(print_direction)
@@ -145,25 +148,40 @@ class TopOpt():
             self.overhang_local      = local
             self.overhang_support    = support
             self.overhang_boundary   = boundary
+
+        # update derivative function (dependent on print_direction)
+        self.dk = self.__get_dk()
         
-    def set_initial_conditions(self, initial_angles_type='random', theta0=0, alpha0=0):
+    def set_initial_conditions(self, angle_type='random', **kwargs):
         # initial angles are given
-        if initial_angles_type == 'fix':
-            self.theta0 = np.deg2rad(theta0)
-            self.alpha0 = np.deg2rad(alpha0)
+        if angle_type == 'fix':
+            theta0 = kwargs.pop('theta0')
+            if self.dim == '3D_free':
+                alpha0 = kwargs.pop('alpha0')
+            else:
+                alpha0 = kwargs.get('alpha0',0)
+
+            self.theta0 = np.deg2rad(theta0) * np.ones(self.num_elem)
+            self.alpha0 = np.deg2rad(alpha0) * np.ones(self.num_elem)
         
         # orientations distributed around the given values
-        elif initial_angles_type == 'noise':
+        elif angle_type == 'noise':
+            theta0 = kwargs.pop('theta0')
+            if self.dim == '3D_free':
+                alpha0 = kwargs.pop('alpha0')
+            else:
+                alpha0 = kwargs.get('alpha0',0)
+
             self.theta0 = np.random.default_rng().normal(np.deg2rad(theta0), np.pi/10, self.num_elem)
             self.alpha0 = np.random.default_rng().normal(np.deg2rad(alpha0), np.pi/10, self.num_elem)
         
         # random numbers between -pi/2 and pi/2
-        elif initial_angles_type == 'random':
+        elif angle_type == 'random':
             self.theta0 = np.random.default_rng().uniform(-np.pi/2, np.pi/2, self.num_elem)
             self.alpha0 = np.random.default_rng().uniform(-np.pi/2, np.pi/2, self.num_elem)
         
         # inital orientations are the principal directions for an isotropic base case
-        elif initial_angles_type == 'principal':
+        elif angle_type == 'principal':
             if self.echo: print('Calculating initial orientations...')
             subprocess.run(self.initial_orientations_cmd)
             angles = np.loadtxt(self.res_root/'initial_principal_angles.txt')
@@ -171,8 +189,11 @@ class TopOpt():
             # initial angle for an element: average of angles on its nodes
             self.theta0 = np.deg2rad(np.mean(angles[self.elmnodes,0], axis=1))
             self.alpha0 = np.deg2rad(np.mean(angles[self.elmnodes,1], axis=1))
+
+        else:
+            raise ValueError('Unsupported value for angle_type')
             
-    def set_optim_options(self, max_iter=200, tol=0, continuation=False, move=0.2, max_grey=0.3, void_thr=0.1, filled_thr=0.9):
+    def set_optim_options(self, *, max_iter=200, tol=0, continuation=False, move=0.2, max_grey=0.3, void_thr=0.1, filled_thr=0.9):
         self.max_iter = max_iter
         self.tol      = tol
         self.move     = move
@@ -190,52 +211,10 @@ class TopOpt():
         else:
             self.penal      = 3
             self.beta       = 25 # overhang projection parameter
-            
-    def create_optimizer(self):
-        rho    = self.volfrac * np.ones(self.num_elem)
-        self.x = rho
-        self.x[self.solid_elem] = 1
-        
-        xmin = self.rho_min*np.ones_like(rho)
-        xmax = np.ones_like(rho)
-        
-        # add theta variable
-        if self.dim == '2D' or self.dim == '3D_layer' or self.dim == '3D_free':
-            theta  = self.theta0 * np.ones(self.num_elem)
-            self.x = np.concatenate((rho,theta))
-            xmin = np.concatenate((xmin, -np.pi*np.ones_like(theta)))
-            xmax = np.concatenate((xmax, np.pi*np.ones_like(theta)))
-        
-        # add alpha variable
-        if self.dim == '3D_free':
-            alpha = self.alpha0 * np.ones(self.num_elem)
-            self.x = np.concatenate((self.x,alpha))
-            xmin = np.concatenate((xmin, -np.pi*np.ones_like(alpha)))
-            xmax = np.concatenate((xmax, np.pi*np.ones_like(alpha)))
-            
-        # sensitivities: dkdt, dkda = dk(theta,alpha,elmvol)
-        if self.dim == '2D':
-            self.dk = lambda theta,alpha,elmvol: dk2d(self.Ex,self.Ey,self.nuxy,self.nuyz,self.Gxy,theta,elmvol)
-        elif self.dim == '3D_layer' or self.dim == '3D_free':
-            self.dk = lambda theta,alpha,elmvol: dk3d(self.Ex,self.Ey,self.nuxy,self.nuyz,self.Gxy,theta,alpha,elmvol,self.print_euler)
-        
-        self.mma = MMA(self.fea,self.sensitivities,self.constraint,self.dconstraint,xmin,xmax,self.move)
-        
-        self.rho_hist      = []
-        self.theta_hist    = []
-        self.alpha_hist    = []
-        self.comp_hist     = [[] for _ in range(self.load_cases)]
-        self.comp_max_hist = []
-        self.penal_hist    = []
-        self.beta_hist     = []
-        
-        self.time       = 0
-        self.fea_time   = 0
-        self.deriv_time = 0
         
     def run(self):
         try: self.mma
-        except AttributeError: raise Exception('Optimizer not defined. First execute function create_optimizer()') from None
+        except AttributeError: self.__create_optimizer()
     
         t0 = time.time()
         for it in range(self.max_iter):
@@ -286,25 +265,20 @@ class TopOpt():
             print('Greyness = {:.3f}'.format(self.greyness))
             print()
         
-        self.clear_files()
+        self.__clear_files()
         self.time += time.time() - t0
         return self.x
-
-    def clear_files(self):
-        # clear Ansys temporary files
-        for filename in glob.glob('cleanup*'): os.remove(filename)
-        for filename in glob.glob(self.title + '.*'): os.remove(filename)
             
     def print_timing(self):
         print('Total elapsed time     {:7.2f}s'.format(self.time))
         print('FEA time               {:7.2f}s'.format(self.fea_time))
         print('Derivation time        {:7.2f}s'.format(self.deriv_time))
         print('Variable updating time {:7.2f}s'.format(self.mma.update_time))
-            
+
     def save(self, filename=None):
         if filename is None: filename = self.res_root / 'topopt.json'
         
-        json_str = json.dumps(jsonpickle.encode(self), indent=2)
+        json_str = json.dumps(jsonpickle.encode(self))
         with open(filename, 'w') as f:
             f.write(json_str)
     
@@ -332,12 +306,6 @@ class TopOpt():
         return np.amax(u)
     
     def get_CO2_footprint(self, rho, CO2mat, CO2veh):
-        """
-        rho: density
-        CO2mat: mass CO2 emmited per mass material (material production)
-        CO2veh: mass CO2 emitted per mass material during life (use in a vehicle)
-                = mass fuel per mass transported per lifetime * service life * mass CO2 emmited per mass fuel
-        """
         return self.get_mass(rho) * (CO2mat + CO2veh)
 
     # -------------------------------------------- Optimization functions --------------------------------------------
@@ -543,7 +511,7 @@ class TopOpt():
     
     def __get_mesh_data(self):
         subprocess.run(self.meshdata_cmd)
-        self.clear_files()
+        self.__clear_files()
         
         num_elem, num_node = np.loadtxt(self.res_root/'elements_nodes_counts.txt', dtype=int) # num_elm num_nodes
         centers            = np.loadtxt(self.res_root/'elements_centers.txt')[:, 1:]          # label x y z
@@ -595,6 +563,51 @@ class TopOpt():
                 boundary[ei] = np.unique(boundary[ei])
                         
         return local, support, boundary
+
+    def __create_optimizer(self):
+        rho    = self.volfrac * np.ones(self.num_elem)
+        self.x = rho
+        self.x[self.solid_elem] = 1
+        
+        xmin = self.rho_min*np.ones_like(rho)
+        xmax = np.ones_like(rho)
+        
+        # add theta variable
+        if self.dim == '2D' or self.dim == '3D_layer' or self.dim == '3D_free':
+            theta  = self.theta0
+            self.x = np.concatenate((rho,theta))
+            xmin = np.concatenate((xmin, -np.pi*np.ones_like(theta)))
+            xmax = np.concatenate((xmax, np.pi*np.ones_like(theta)))
+        
+        # add alpha variable
+        if self.dim == '3D_free':
+            alpha = self.alpha0
+            self.x = np.concatenate((self.x,alpha))
+            xmin = np.concatenate((xmin, -np.pi*np.ones_like(alpha)))
+            xmax = np.concatenate((xmax, np.pi*np.ones_like(alpha)))
+        
+        self.mma = MMA(self.fea,self.sensitivities,self.constraint,self.dconstraint,xmin,xmax,self.move)
+        
+        self.rho_hist      = []
+        self.theta_hist    = []
+        self.alpha_hist    = []
+        self.comp_hist     = [[] for _ in range(self.load_cases)]
+        self.comp_max_hist = []
+        self.penal_hist    = []
+        self.beta_hist     = []
+        
+        self.time       = 0
+        self.fea_time   = 0
+        self.deriv_time = 0
+
+    def __get_dk(self):
+        # sensitivities: dkdt, dkda = dk(theta,alpha,elmvol)
+        if self.dim == '2D':
+            dk = lambda theta,alpha,elmvol: dk2d(self.Ex,self.Ey,self.nuxy,self.nuyz,self.Gxy,theta,elmvol)
+        elif self.dim == '3D_layer' or self.dim == '3D_free':
+            dk = lambda theta,alpha,elmvol: dk3d(self.Ex,self.Ey,self.nuxy,self.nuyz,self.Gxy,theta,alpha,elmvol,self.print_euler)
+
+        return dk
     
     def __get_greyness(self, rho):
         return np.count_nonzero((rho > self.void_thr) & (rho < self.filled_thr))/self.num_elem
@@ -617,3 +630,8 @@ class TopOpt():
         elm_printability = rho_s > 0.5
         
         return phi, rho_s, mu_s, elm_printability, score
+
+    def __clear_files(self):
+        # clear Ansys temporary files
+        for filename in glob.glob('cleanup*'): os.remove(filename)
+        for filename in glob.glob(self.title + '.*'): os.remove(filename)
