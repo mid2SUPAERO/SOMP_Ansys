@@ -57,14 +57,14 @@ For 2D optimizations, the implementation assumes a 4-node quadrilateral element 
         (1-r) (1-s) \\
         (1+r) (1-s) \\
         (1+r) (1+s) \\
-        (1-r) (1+s) \\
+        (1-r) (1+s)
     \end{Bmatrix}
 ```
 ```math
     \boldsymbol{B_e} = \begin{bmatrix}
         \frac{\partial N_1}{\partial r} & 0 & \cdots & \frac{\partial N_4}{\partial r} & 0 \\
         0 & \frac{\partial N_1}{\partial s} & \cdots & 0 & \frac{\partial N_4}{\partial s} \\
-        \frac{\partial N_1}{\partial s} & \frac{\partial N_1}{\partial r} & \cdots & \frac{\partial N_4}{\partial s} & \frac{\partial N_4}{\partial r} \\
+        \frac{\partial N_1}{\partial s} & \frac{\partial N_1}{\partial r} & \cdots & \frac{\partial N_4}{\partial s} & \frac{\partial N_4}{\partial r}
     \end{bmatrix}
 ```
 
@@ -80,7 +80,7 @@ For 3D optimizations, the implementation assumes an 8-node brick element (SOLID1
         (1-r) (1-s) (1+t) \\
         (1+r) (1-s) (1+t) \\
         (1+r) (1+s) (1+t) \\
-        (1-r) (1+s) (1+t) \\
+        (1-r) (1+s) (1+t)
     \end{Bmatrix}
 ```
 ```math
@@ -90,7 +90,7 @@ For 3D optimizations, the implementation assumes an 8-node brick element (SOLID1
         0 & 0 & \frac{\partial N_1}{\partial t} & \cdots & 0 & 0 & \frac{\partial N_8}{\partial t} \\
         0 & \frac{\partial N_1}{\partial t} & \frac{\partial N_1}{\partial s} & \cdots & 0 & \frac{\partial N_8}{\partial t} & \frac{\partial N_8}{\partial s} \\
         \frac{\partial N_1}{\partial t} & 0 & \frac{\partial N_1}{\partial r} & \cdots & \frac{\partial N_8}{\partial t} & 0 & \frac{\partial N_8}{\partial r} \\
-        \frac{\partial N_1}{\partial s} & \frac{\partial N_1}{\partial r} & 0 & \cdots & \frac{\partial N_8}{\partial s}  & \frac{\partial N_8}{\partial r} & 0 \\
+        \frac{\partial N_1}{\partial s} & \frac{\partial N_1}{\partial r} & 0 & \cdots & \frac{\partial N_8}{\partial s}  & \frac{\partial N_8}{\partial r} & 0
     \end{bmatrix}
 ```
 
@@ -116,7 +116,7 @@ The constitutive matrix $\boldsymbol{C}$ for transverse isotropic materials and 
         -\frac{\nu_{xy}}{E_x} & -\frac{\nu_{yz}}{E_y} & \frac{1}{E_y} & 0 & 0 & 0 \\
         0 & 0 & 0 & \frac{2(1+\nu_{yz})}{E_y} & 0 & 0 \\
         0 & 0 & 0 & 0 & \frac{1}{G_{xy}} & 0 \\
-        0 & 0 & 0 & 0 & 0 & \frac{1}{G_{xy}} \\
+        0 & 0 & 0 & 0 & 0 & \frac{1}{G_{xy}}
     \end{bmatrix}^{-1}
 ```
 ```math
@@ -136,7 +136,7 @@ The constitutive matrix $\boldsymbol{C}$ for transverse isotropic materials and 
         0 & s_\alpha^2 & c_\alpha^2 & 2 c_\alpha s_\alpha & 0 & 0 \\
         0 & c_\alpha s_\alpha & - c_\alpha s_\alpha & c_\alpha^2-s_\alpha^2 & 0 & 0 \\
         0 & 0 & 0 & 0 & c_\alpha & s_\alpha \\
-        0 & 0 & 0 & 0 & -s_\alpha & c_\alpha \\
+        0 & 0 & 0 & 0 & -s_\alpha & c_\alpha
     \end{bmatrix}
 ```
 
