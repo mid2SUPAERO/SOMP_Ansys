@@ -265,7 +265,6 @@ class TopOpt():
             print('Greyness = {:.3f}'.format(self.greyness))
             print()
         
-        self.__clear_files()
         self.time += time.time() - t0
         return self.x
             
@@ -310,6 +309,9 @@ class TopOpt():
 
     # -------------------------------------------- Optimization functions --------------------------------------------
     def fea(self, x):
+        try: self.mma
+        except AttributeError: self.__create_optimizer() # creates vectors to save compliances if running standalone
+
         t0 = time.time()
         
         if self.dim == 'SIMP':
@@ -366,6 +368,7 @@ class TopOpt():
         self.beta_hist.append(self.beta)
 
         self.fea_time += time.time() - t0
+        self.__clear_files()
         if self.echo: print()
         return comp_max
     
@@ -465,7 +468,7 @@ class TopOpt():
     # -------------------------------------------- Internal functions --------------------------------------------
     def __build_apdl_scripts(self):
         inputfiles = self.inputfiles
-        self.title = inputfiles[0] if self.jobname is None else self.jobname
+        self.title = 'file' if self.jobname is None else self.jobname
         meshdata_base = 'ansys_meshdata_2d.txt' if self.dim == '2D' else 'ansys_meshdata_3d.txt'
 
         # meshdata script

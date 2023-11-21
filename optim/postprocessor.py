@@ -89,10 +89,10 @@ class Post3D(PostProcessor):
             fig = plt.figure(dpi=500)
             ax = fig.add_axes([0,0,1,1], projection='3d')
         ax.cla()
-        deltax = np.amax(self.solver.node_coord[:,0]) - np.amin(self.solver.node_coord[:,0])
-        deltay = np.amax(self.solver.node_coord[:,1]) - np.amin(self.solver.node_coord[:,1])
-        deltaz = np.amax(self.solver.node_coord[:,2]) - np.amin(self.solver.node_coord[:,2])
-        ax.set_box_aspect((deltax,deltay,deltaz))            
+        
+        maxdim = np.max(self.solver.node_coord, axis=0)
+        mindim = np.min(self.solver.node_coord, axis=0)
+        ax.set_box_aspect((maxdim-mindim))
         ax.view_init(elev=elev, azim=azim)
 
         if domain_stl is not None:
@@ -123,8 +123,17 @@ class Post3D(PostProcessor):
         rho = self.solver.rho_hist[iteration]
         if printability:
             color = ['black' if printable else 'red' for printable in self.solver.elm_printability]
+            
+            # plot print direction
+            origin = np.where(self.solver.print_direction<0, maxdim, 0)
+            plt.quiver(*origin, *self.solver.print_direction, label='Printing direction', color='r', length=0.2*np.max(maxdim), linewidth=2)
         elif colorful:
             color = [(np.abs(w[i]),np.abs(u[i]),np.abs(v[i])) for i in range(len(u))]
+            
+            # plot coordinate system
+            plt.quiver(*mindim, 1., 0., 0., color=(0.,1.,0.), length=0.1*np.max(maxdim), linewidth=2)
+            plt.quiver(*mindim, 0., 1., 0., color=(0.,0.,1.), length=0.1*np.max(maxdim), linewidth=2)
+            plt.quiver(*mindim, 0., 0., 1., color=(1.,0.,0.), length=0.1*np.max(maxdim), linewidth=2)
         else:
             color = 'black'     
             
@@ -153,7 +162,7 @@ class Post3D(PostProcessor):
         ax.set_aspect('equal')
         plt.xlim(np.amin(plot_lim[0,:]),np.amax(plot_lim[0,:]))
         plt.ylim(np.amin(plot_lim[1,:]),np.amax(plot_lim[1,:]))
-        plt.title('Layer {}/{}'.format(layer,len(self.solver.layers)-1))
+        plt.title('Layer {}/{}'.format(layer+1,len(self.solver.layers)))
         
         print_coord = T @ self.solver.centers[idx,:].T
         x, y = print_coord[0,:], print_coord[1,:]

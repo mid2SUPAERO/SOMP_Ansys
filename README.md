@@ -1,5 +1,203 @@
 # SOMP_Ansys
 
+This code implements a finite element-based topology optimization algorithm for 3D printed structures. It is written in Python and uses Ansys as finite element solver.
+
+### Problem formulation
+For each element, a density value $\rho_e$ within the range from 0 (void element) to 1 (filled element) is assigned. To enforce the convergence to a predominantly 0/1 configuration (the only physically feasible values, there is no intermediate material), the material properties for each element are obtained from a power-law interpolation, i.e. dependent on $\rho_e^p$, where $p$ is a penalization factor.
+
+The fiber orientation within each element is defined by two angles: in-plane orientation $\theta_e$ and out-of-plane orientation $\alpha_e$.
+
+The problem formulation, for which the three sets of variables are simultaneously optimized, is (SCHMIDT _et al_, 2020):
+$$
+\begin{aligned}
+    \min_{\boldsymbol\rho,\boldsymbol\theta,\boldsymbol\alpha} c(\boldsymbol\rho,\boldsymbol\theta, \boldsymbol\alpha) & = \sum_e \rho_e^p \, \boldsymbol{u_e^T} \, \boldsymbol{k_0}(\theta_e,\alpha_e) \, \boldsymbol{u_e} \\
+    \textrm{s.t. } & \begin{cases}
+        \frac{V(\boldsymbol\rho)}{V_0} \leq f \\
+        \boldsymbol{KU} = \boldsymbol{F} \\
+        0 < \rho_{min} \leq \boldsymbol\rho \leq 1 \\
+        -\frac{\pi}{2} \leq \boldsymbol\theta \leq \frac{\pi}{2} \\
+        -\frac{\pi}{2} \leq \boldsymbol\alpha \leq \frac{\pi}{2}
+    \end{cases}
+\end{aligned}
+$$
+where $\boldsymbol U$ and $\boldsymbol F$ are the global displacement and force vectors, respectively, $\boldsymbol K$ is the global stiffness matrix, $\boldsymbol{u_e}$ and $\boldsymbol{k_e} = \rho_e^p \boldsymbol{k_0}$ are the element displacement vector and stiffness matrix, respectively, $\boldsymbol\rho$ is the vector of design variables, $\rho_{min}$ is the minimum relative density (non-zero to avoid singularity), $V(\boldsymbol\rho)$ and $V_0$ are the material volume and design domain volume, and $f$ is the prescribed volume fraction.
+
+### Filtering
+To avoid the appearance of checkerboard patterns and to ensure the mesh-independence of the result, the element sensitivities are filtered by a linear decaying convolution filter (SIGMUND, 2001):
+$$
+    \rho_e \,\widetilde{\frac{\partial c}{\partial\rho_e}} = \frac{1}{\sum_i H^\rho_{ei}} \, \sum_i H^\rho_{ei} \,\rho_i \,\frac{\partial c}{\partial\rho_i}
+$$
+$$
+    H^\rho_{ei} = \max(0, r_\rho - \Delta(e,i))
+$$
+where $r_\rho$ is a fixed filter radius and the $\Delta(e,i)$ operator is the distance between the centers of elements $e$ and $i$.
+
+For orientation smoothing, a similar convolution filter was applied directly to the angles at each iteration, adjusted to reduce the weight of void elements on the average:
+$$
+    \begin{pmatrix}
+        \tilde\theta_e \\ \tilde\alpha_e
+    \end{pmatrix} = \frac{1}{\sum_i H^\theta_{ei} \, \rho_i} \sum_i H^\theta_{ei} \, \rho_i \begin{pmatrix}
+        \theta_i \\ \alpha_i
+    \end{pmatrix}
+$$
+$$
+    H^\theta_{ei} = \max(0, r_\theta - \Delta(e,i))
+$$
+where $r_\theta$ is independent from $r_\rho$ and is related to the desired minimum fiber curvature.
+
+### Finite element formulation
+For 2D optimizations, the implementation assumes a 4-node quadrilateral element (Ansys element type PLANE182), whose form functions $N_i$ and strain-displacement matrix $\boldsymbol{B_e}$ are
+$$
+    \begin{Bmatrix}
+        N_1 \\ N_2 \\ N_3  \\ N_4
+    \end{Bmatrix} (r,s) = \frac{1}{4} \begin{Bmatrix}
+        (1-r) (1-s) \\
+        (1+r) (1-s) \\
+        (1+r) (1+s) \\
+        (1-r) (1+s) \\
+    \end{Bmatrix}
+$$
+$$
+    \boldsymbol{B_e} = \begin{bmatrix}
+        \frac{\partial N_1}{\partial r} & 0 & \cdots & \frac{\partial N_4}{\partial r} & 0 \\
+        0 & \frac{\partial N_1}{\partial s} & \cdots & 0 & \frac{\partial N_4}{\partial s} \\
+        \frac{\partial N_1}{\partial s} & \frac{\partial N_1}{\partial r} & \cdots & \frac{\partial N_4}{\partial s} & \frac{\partial N_4}{\partial r} \\
+    \end{bmatrix}
+$$
+
+For 3D optimizations, the implementation assumes an 8-node brick element (SOLID185):
+$$
+    \begin{Bmatrix}
+        N_1 \\ N_2 \\ N_3 \\ N_4 \\ N_5 \\ N_6 \\ N_7 \\ N_8 \\
+    \end{Bmatrix}(r,s,t) = \frac{1}{8} \begin{Bmatrix}
+        (1-r) (1-s) (1-t) \\
+        (1+r) (1-s) (1-t) \\
+        (1+r) (1+s) (1-t) \\
+        (1-r) (1+s) (1-t) \\
+        (1-r) (1-s) (1+t) \\
+        (1+r) (1-s) (1+t) \\
+        (1+r) (1+s) (1+t) \\
+        (1-r) (1+s) (1+t) \\
+    \end{Bmatrix}
+$$
+$$
+    \boldsymbol{B_e} = \begin{bmatrix}
+        \frac{\partial N_1}{\partial r} & 0 & 0 & \cdots & \frac{\partial N_8}{\partial r} & 0 & 0 \\
+        0 & \frac{\partial N_1}{\partial s} & 0 & \cdots & 0 & \frac{\partial N_8}{\partial s} & 0 \\
+        0 & 0 & \frac{\partial N_1}{\partial t} & \cdots & 0 & 0 & \frac{\partial N_8}{\partial t} \\
+        0 & \frac{\partial N_1}{\partial t} & \frac{\partial N_1}{\partial s} & \cdots & 0 & \frac{\partial N_8}{\partial t} & \frac{\partial N_8}{\partial s} \\
+        \frac{\partial N_1}{\partial t} & 0 & \frac{\partial N_1}{\partial r} & \cdots & \frac{\partial N_8}{\partial t} & 0 & \frac{\partial N_8}{\partial r} \\
+        \frac{\partial N_1}{\partial s} & \frac{\partial N_1}{\partial r} & 0 & \cdots & \frac{\partial N_8}{\partial s}  & \frac{\partial N_8}{\partial r} & 0 \\
+    \end{bmatrix}
+$$
+
+### Material modeling
+The materials are modeled as transverse isotropic, suitable for matrices reinforced by unidirectional fibers. The fibers were considered to be aligned with the local $x$ axis, which can be characterised by five independent elastic constants: longitudinal Young modulus $E_x$, transversal Young modulus $E_y$, in-plane Poisson's ratio $\nu_{xy}$, out-of-plane Poisson's ratio $\nu_{yz}$, and in-plane shear modulus $G_{xy}$. From the rule of mixtures for a fiber volume fraction of $V_f$:
+$$ E_x = E_f V_f + E_m (1-V_f) $$
+$$ E_y = \frac{E_f E_m}{E_f(1-V_f) + E_m V_f} $$
+$$ \nu_{xy} = \nu_f V_f + \nu_m (1-V_f) $$
+$$ G_{xy} = \frac{G_f G_m}{G_f(1-V_f) + G_m V_f} $$
+where $E_f$, $\nu_f$, $G_f$ are the fiber properties and $E_m$, $\nu_m$, $G_m$ are the matrix properties. Finally, $\nu_{yz}$ is defined by symmetries in 3D elasticity (CHRISTENSEN, 1988)
+$$ \nu_{yz} = \nu_{xy} \, \frac{1 - \nu_{xy} \frac{E_y}{E_x}}{1 - \nu_{xy}} $$
+
+The constitutive matrix $\boldsymbol{C}$ for transverse isotropic materials and the matrices corresponding to the $\theta_e$ and $\alpha_e$ rotations are
+$$
+    \boldsymbol{C} = \begin{bmatrix}
+        \frac{1}{E_x} & -\frac{\nu_{xy}}{E_x} & -\frac{\nu_{xy}}{E_x} & 0 & 0 & 0 \\
+        -\frac{\nu_{xy}}{E_x} & \frac{1}{E_y} & -\frac{\nu_{yz}}{E_y} & 0 & 0 & 0 \\
+        -\frac{\nu_{xy}}{E_x} & -\frac{\nu_{yz}}{E_y} & \frac{1}{E_y} & 0 & 0 & 0 \\
+        0 & 0 & 0 & \frac{2(1+\nu_{yz})}{E_y} & 0 & 0 \\
+        0 & 0 & 0 & 0 & \frac{1}{G_{xy}} & 0 \\
+        0 & 0 & 0 & 0 & 0 & \frac{1}{G_{xy}} \\
+    \end{bmatrix}^{-1}
+$$
+$$
+    \boldsymbol{T_\theta}(\theta_e) = \begin{bmatrix}
+        c_\theta^2 & s_\theta^2 & 0 & 0 & 0 & -2s_\theta c_\theta \\
+        s_\theta^2 & c_\theta^2 & 0 & 0 & 0 & 2 s_\theta c_\theta \\
+        0 & 0 & 1 & 0 & 0 & 0 \\
+        0 & 0 & 0 & c_\theta & s_\theta & 0 \\
+        0 & 0 & 0 & -s_\theta & c_\theta & 0 \\
+        c_\theta s_\theta & - c_\theta s_\theta & 0 & 0 & 0 & c_\theta^2-s_\theta^2
+    \end{bmatrix}
+$$
+$$
+    \boldsymbol{T_\alpha}(\alpha_e) = \begin{bmatrix}
+        1 & 0 & 0 & 0 & 0 & 0 \\
+        0 & c_\alpha^2 & s_\alpha^2 & -2c_\alpha s_\alpha & 0 & 0 \\
+        0 & s_\alpha^2 & c_\alpha^2 & 2 c_\alpha s_\alpha & 0 & 0 \\
+        0 & c_\alpha s_\alpha & - c_\alpha s_\alpha & c_\alpha^2-s_\alpha^2 & 0 & 0 \\
+        0 & 0 & 0 & 0 & c_\alpha & s_\alpha \\
+        0 & 0 & 0 & 0 & -s_\alpha & c_\alpha \\
+    \end{bmatrix}
+$$
+where $c_\theta = \cos\theta_e$, $s_\theta = \sin\theta_e$, $c_\alpha = \cos\alpha_e$, $s_\alpha = \sin\alpha_e$.
+
+### Sensitivity analysis
+The variable updating scheme is the Method of Moving Asymptotes - MMA (SVANBERG, 1987). It is then necessary to calculate at each iteration the sensitivities of the compliance with respect to the design variables:
+$$
+\frac{\partial c}{\partial \rho_e} = -p \, \rho_e^{p-1} \boldsymbol{u_e^T} \, \boldsymbol{k_0} \, \boldsymbol{u_e} = -\frac{p}{\rho_e} \, \underbrace{\rho_e^{p} \boldsymbol{u_e^T} \, \boldsymbol{k_0} \, \boldsymbol{u_e}}_{\substack{\text{element} \\ {\text{strain energy}}}}
+$$
+$$
+\frac{\partial c}{\partial \theta_e} = -\rho_e^p \, \boldsymbol{u_e^T} \, \frac{\partial \boldsymbol{k_0}}{\partial \theta_e} \, \boldsymbol{u_e^T}
+$$
+$$
+\frac{\partial c}{\partial \alpha_e} = -\rho_e^p \, \boldsymbol{u_e^T} \, \frac{\partial \boldsymbol{k_0}}{\partial \alpha_e} \, \boldsymbol{u_e^T}
+$$
+
+The derivatives $\frac{\partial \boldsymbol{k_0}}{\partial \theta_e}$ and $\frac{\partial \boldsymbol{k_0}}{\partial \alpha_e}$ need to be integrated since these matrices are not directly accessible as Ansys results. Each integral was numerically evaluated with 2-point Gaussian quadrature.
+$$
+\frac{\partial \boldsymbol{k_0}}{\partial \theta_e} (\theta_e, \alpha_e) =
+\iiint \boldsymbol{B_e^T} \, \boldsymbol{T_\alpha} \, \left( \frac{\partial \boldsymbol{T_\theta}}{\partial \theta_e} \, \boldsymbol{C} \, \boldsymbol{T_\theta^T} + \boldsymbol{T_\theta} \, \boldsymbol{C} \, \frac{\partial \boldsymbol{T_\theta^T}}{\partial\theta_e} \right) \, \boldsymbol{T_\alpha^T} \, \boldsymbol{B_e} \, d\boldsymbol{\Omega}
+$$
+$$
+\frac{\partial \boldsymbol{k_0}}{\partial \alpha_e} (\theta_e, \alpha_e) =
+\iiint \boldsymbol{B_e^T} \left( \frac{\partial \boldsymbol{T_\alpha}}{\partial \alpha_e} \boldsymbol{T_\theta} \boldsymbol{C} \boldsymbol{T_\theta^T} \boldsymbol{T_\alpha^T} + \boldsymbol{T_\alpha}  \boldsymbol{T_\theta} \boldsymbol{C} \boldsymbol{T_\theta^T} \frac{\partial \boldsymbol{T_\alpha^T}}{\partial \alpha_e} \right) \boldsymbol{B_e} \, d\boldsymbol{\Omega}
+$$
+
+### Multiple load cases
+For multiple load cases, the compliances are aggregated using a $n$-norm, which is differentiable:
+$$
+\begin{aligned}
+        \min_{\boldsymbol\rho,\boldsymbol\theta,\boldsymbol\alpha} C(\boldsymbol\rho,\boldsymbol\theta,\boldsymbol\alpha) & = \left(\sum_{i \in LC} c_i(\boldsymbol\rho,\boldsymbol\theta,\boldsymbol\alpha)^n\right)^\frac{1}{n} \\
+        & = \left(\sum_{i \in LC} \left(\sum_e \rho_e^p \, \boldsymbol{u_{e,i}^T} \, \boldsymbol{k_0}(\theta_e,\alpha_e) \, \boldsymbol{u_{e,i}}\right)^n\,\right)^\frac{1}{n} \\[10pt]
+        \textrm{s.t. } & \begin{cases}
+            \frac{V(\boldsymbol\rho)}{V_0} \leq f \\
+            \boldsymbol{KU} = \boldsymbol{F} \\
+            0 < \rho_{min} \leq \boldsymbol\rho \leq 1 \\
+            -\frac{\pi}{2} \leq \boldsymbol\theta \leq \frac{\pi}{2} \\
+            -\frac{\pi}{2} \leq \boldsymbol\alpha \leq \frac{\pi}{2} \\
+        \end{cases}
+    \end{aligned}
+$$
+
+The new sensitivities are:
+$$
+\frac{\partial C}{\partial \, \cdot} = \sum_{i \in LC} c_i^{n-1} \, C^{1-n} \, \frac{\partial c_i}{\partial \, \cdot}
+$$
+
+### Continuation method
+To facilitate the convergence and avoid local minima, a continuation method in is applied on the penalization factor $p$ as in Castro Almeida (2023). Instead of having a fixed value throughout the whole optimization, it starts at $p = 1$ and is increased each time a convergence in compliance is achieved. The stopping criterion for the continuation is the greyness level of the design, i.e., when the proportion of elements that are neither void nor filled is below a certain level.
+
+### $CO_2$ footprint assessment
+The environmental impact of the structure is measured in terms of the mass of $CO_2$ emitted during material production and during its use in a long distance aircraft (DURIEZ _et al_, 2022).
+
+Firstly, the material density $\rho$ was calculated from the fiber and matrix densities $\rho_f$ and $\rho_m$:
+$$ \rho = \rho_f V_f + \rho_m (1-V_f) $$
+
+The impact of the material production $CO_{2,mat}$ depends on the total mass $M$ and the $CO_2$ intensity of the material $CO_{2,mat}^i$ (mass of $CO_2$ emitted per mass of material):
+$$ CO_{2,mat} = M \cdot CO_{2,mat}^i $$
+where $CO_{2,mat}^i$ depends on the $CO_2$ intensities of the fiber and matrix, $CO_{2,f}^i$ and $CO_{2,m}^i$:
+$$
+    CO_{2,mat}^i = \frac{\rho_f \, V_f \, CO_{2,f}^i + \rho_m \, (1-V_f) \, CO_{2,m}^i}{\rho}
+$$
+
+The impact of the use phase $CO_{2,use}$ is calculated as the amount of emissions that would be saved if the component was lighter. Reducing the mass by 1 kg in a long distance aircraft leads to a reduction of 98.8 $tCO_2$ during its lifetime:
+$$ CO_{2,use} = M \cdot 98.8\;\mathrm{tCO_2/kg} $$
+
+The value used to compare different designs is the total footprint $CO_{2,tot}$:
+$$ CO_{2,tot} = CO_{2,mat} + CO_{2,use} $$
+
 ## Dependencies
 
 The code was tested with the following libraries in Python >= 3.7:
@@ -15,7 +213,7 @@ Examples may have additional dependencies:
 ## Examples
 
 - `SimpleExample.ipynb`: Jupyter notebook with an example of 2D and 3D optimizations
-- `global3d.py`: example of a complete 3D optimization. Launches multiple optimizations with different materials. Results in `examples/global3d.out`, visualized in `global3d_plots.py`
+- `global3d.py`: example of a complete 3D optimization. Launches multiple optimizations with different materials. Results in `examples/global3d.out`, visualized with `global3d_plots.py`
 - `NaturalFibers.ipynb`: Jupyter notebook comparing different materials
 - `bridge.py`: example of a complete 2D optimization. Uses MPI to launch parallel processes with different initial orientations
 - `Bracket.ipynb`: Jupyter notebook with a more complex 3D optimization
@@ -246,3 +444,11 @@ For 3D optimizations: `Post3D(solver)`
 - `plot_fill(iteration=-1, threshold=0.8, filename=None, save=True, fig=None, ax=None)`
 
   Plots each eleemnt with density greater than `threshold` as a box. Not efficient, makes a plot of every face of every element
+
+## References
+- A. Castro Almeida, E. Duriez, F. Lachaud, J. Morlier. New topology optimization for low CO2 footprint AFP composite structures, Poster session, WCSMO 2023.
+- R. M. Christensen. Tensor transformations and failure criteria for the analysis of fiber composite materials, Journal of Composite Materials 22.9, 874-897, 1988.
+- E. Duriez, J. Morlier, C. Azzaro-Pantel, M. Charlotte. Ecodesign with topology optimization, Procedia CIRP, Elsevier, 454-459, 2022.
+- M. Schmidt, L. Couret, C. Gout, C. Pedersen. Structural topology optimization with smoothly varying fiber orientations, Structural and Multidisciplinary Optimization, Springer, 3105-3126, 2020.
+- O. Sigmund. A 99 line topology optimization code written in Matlab, Structural and multidisciplinary optimization, Springer, 120-127, 2001.
+- K. Svanberg. The method of moving asymptotes—a new method for structural optimization, International journal for numerical methods in engineering, Wiley Online Library, 359-373, 1987.
