@@ -4,18 +4,9 @@ if path not in sys.path:
     sys.path.append(path)
 
 from mpi4py import MPI
-
-from pathlib import Path
 import numpy as np
 
 from optim import TopOpt, Post3D
-
-ANSYS_path = Path('mapdl')
-res_dir    = Path('results/bridge/')
-mod_dir    = Path('models/')
-TopOpt.set_paths(ANSYS_path, res_dir, mod_dir)
-
-raise
 
 Ex   = 113.6e3 # MPa
 Ey   = 9.65e3 # MPa
@@ -33,7 +24,7 @@ theta0 = np.linspace(-90, 90, num=size-1)
 theta0 = np.append(theta0, None) # last one works with random initial condition
 
 jobname = str(int(theta0[rank])) if rank != size-1 else 'rand'
-solver = TopOpt(inputfiles='bridge', dim='2D', jobname=jobname, echo=False)
+solver = TopOpt(inputfile='models/bridge.db', res_dir=f'results/bridge/{jobname}/', dim='2D', jobname=jobname, echo=False)
 solver.set_material(Ex=Ex, Ey=Ey, nuxy=nuxy, nuyz=nuxy, Gxy=Gxy)
 solver.set_volfrac(0.45)
 solver.set_filters(r_rho=70, r_theta=160)
@@ -56,7 +47,7 @@ post.plot_convergence()
 post.plot()
 post.animate()
 
-comp  = comm.gather(solver.comp_hist[-1])
+comp  = comm.gather(solver.comp_max_hist[-1])
 niter = comm.gather(solver.mma.iter)
 dt    = comm.gather(solver.time)
 

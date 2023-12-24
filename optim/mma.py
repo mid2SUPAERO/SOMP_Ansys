@@ -8,10 +8,10 @@ import time
 # https://github.com/arjendeetman/GCMMA-MMA-Python
 """
 MMA(fobj, dfobj, const, dconst, xmin, xmax, move):
-    fobj: callable (x: np.array) -> objective function value
-    dfboj: callable (x: np.array) -> objective function sensitivities: np.array
-    const: callable (x: np.array) -> constraint function value: const(x) <= 0
-    dconst: callable (x: np.array) -> derivatives of constraint function: np.array
+    fobj: callable () -> objective function value
+    dfboj: callable () -> objective function sensitivities: np.array
+    const: callable () -> constraint function value: const() <= 0
+    dconst: callable () -> derivatives of constraint function: np.array
     xmin: minimum value for each design variable: np.array
     xmax: maximum value for each design variable: np.array
     move: move limit for all varaibles, in a percentage of the allowable range
@@ -20,16 +20,19 @@ iterate(x):
     returns updated x
 """
 class MMA():
-    def __init__(self,fobj,dfobj,const,dconst,xmin,xmax,move):
+    def __init__(self,fobj,dfobj,const,dconst,xmin,xmax,move,asyinit,asyincr,asydecr):
         self.fobj   = fobj
         self.dfobj  = dfobj
         self.const  = const
         self.dconst = dconst
 
         self.m = 1
-        self.xmin = xmin[np.newaxis].T
-        self.xmax = xmax[np.newaxis].T
-        self.move = move
+        self.xmin    = xmin[np.newaxis].T
+        self.xmax    = xmax[np.newaxis].T
+        self.move    = move
+        self.asyinit = asyinit
+        self.asyincr = asyincr
+        self.asydecr = asydecr
 
         self.iter = 0
         self.a0 = 1.0 
@@ -52,24 +55,24 @@ class MMA():
         xold1 = self.xold1.copy()[np.newaxis].T
         xold2 = self.xold2.copy()[np.newaxis].T
 
-        f0val = self.fobj(x)
-        df0dx = self.dfobj(x)[np.newaxis].T
-        fval = np.array([[self.const(x)]])
-        dfdx = self.dconst(x)[np.newaxis]
+        f0val = self.fobj()
+        df0dx = self.dfobj()[np.newaxis].T
+        fval = np.array([[self.const()]])
+        dfdx = self.dconst()[np.newaxis]
 
         t0 = time.time()
         xmma,ymma,zmma,lam,xsi,eta,mu,zet,s,self.low,self.upp = MMA.mmasub(self.m,self.n,self.iter,xval,self.xmin,self.xmax,
-            xold1,xold2,f0val,df0dx,fval,dfdx,self.low,self.upp,self.a0,self.a,self.c,self.d,self.move)
+            xold1,xold2,f0val,df0dx,fval,dfdx,self.low,self.upp,self.a0,self.a,self.c,self.d,self.move,self.asyinit,self.asyincr,self.asydecr)
         self.update_time += time.time()-t0
         
         self.iter += 1
         self.xold2 = self.xold1.copy()
         self.xold1 = x.copy()
 
-        return xmma.flatten()   
+        return xmma.flatten()
 
     # Function for the MMA sub problem
-    def mmasub(m,n,iter,xval,xmin,xmax,xold1,xold2,f0val,df0dx,fval,dfdx,low,upp,a0,a,c,d, move):
+    def mmasub(m,n,iter,xval,xmin,xmax,xold1,xold2,f0val,df0dx,fval,dfdx,low,upp,a0,a,c,d,move,asyinit,asyincr,asydecr):
         
         """
         This function mmasub performs one MMA-iteration, aimed at solving the nonlinear programming problem:
@@ -127,9 +130,6 @@ class MMA():
         epsimin = 0.0000001
         raa0 = 0.00001
         albefa = 0.1
-        asyinit = 0.2
-        asyincr = 1.2
-        asydecr = 0.7
         eeen = np.ones((n, 1))
         eeem = np.ones((m, 1))
         zeron = np.zeros((n, 1))

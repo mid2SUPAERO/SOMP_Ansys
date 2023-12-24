@@ -3,7 +3,6 @@ path = os.path.abspath(os.path.dirname(__file__).join('.'))
 if path not in sys.path:
     sys.path.append(path)
 
-from pathlib import Path
 import numpy as np
 
 import matplotlib.pyplot as plt
@@ -11,11 +10,6 @@ import niceplots
 plt.style.use(niceplots.get_style())
 
 from optim import TopOpt, Post3D
-
-ANSYS_path = Path('mapdl')
-res_dir    = Path('results/global/')
-mod_dir    = Path('models/')
-TopOpt.set_paths(ANSYS_path, res_dir, mod_dir)
 
 # {t/mm^3, MPa, -, kgCO2/kg}
 bamboo    = {'rho': 700e-12,  'E': 17.5e3,  'v': 0.04,  'CO2': 1.0565}
@@ -48,7 +42,7 @@ for name_f, fiber in zip(names_f, fibers):
         Ex, Ey, nuxy, nuyz, Gxy, rho, CO2mat = TopOpt.rule_mixtures(fiber=fiber, matrix=matrix, Vfiber=0.5)
 
         jobname = '_'.join([name_f, name_m])
-        solver = TopOpt(inputfiles='mbb3d', dim='3D_layer', jobname=jobname, echo=False)
+        solver = TopOpt(inputfile='models/mbb3d.db', res_dir=f'results/global/{jobname}/', dim='3D_layer', jobname=jobname, echo=False)
         solver.set_material(Ex=Ex, Ey=Ey, nuxy=nuxy, nuyz=nuxy, Gxy=Gxy)
         solver.set_volfrac(0.3)
         solver.set_filters(r_rho=8, r_theta=20)

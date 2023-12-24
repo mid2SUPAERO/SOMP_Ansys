@@ -2,6 +2,7 @@ import numpy as np
 
 from matplotlib import cm, colors
 import matplotlib.pyplot as plt
+from matplotlib.patches import Polygon
 from matplotlib.animation import FuncAnimation
 from functools import partial
 
@@ -12,7 +13,7 @@ from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes, mark_inset
 class PostProcessor():
     def __init__(self, solver):
         self.solver = solver
-        self.quiver_scale = 1/(0.8*np.mean(np.cbrt(self.solver.elemvol)))
+        self.quiver_scale = 1/(0.8*self.solver.elem_size)
         
     def plot_convergence(self, start_iter=0, penal=False, filename=None, save=True):
         if penal:
@@ -34,16 +35,21 @@ class PostProcessor():
             ax2.set_ylabel('Penalization factor')
         
         if save:
-            if filename is None: filename = self.solver.res_root / 'convergence.png'
+            if filename is None: filename = self.solver.res_dir / 'convergence.png'
             plt.savefig(filename)
 
 class Post2D(PostProcessor):
+    def __init__(self, solver):
+        if solver.dim != 'SIMP2D' and solver.dim != '2D':
+            raise ValueError('solver does not contain a 2D optimization')
+        super().__init__(solver)
+
     def plot(self, iteration=-1, colorful=False, filename=None, save=True, fig=None, ax=None, zoom=None):
         if fig is None: fig, ax = plt.subplots(dpi=300)
         ax.cla()
         ax.set_aspect('equal')
-        plt.xlim(np.amin(self.solver.node_coord[:,0]),np.amax(self.solver.node_coord[:,0]))
-        plt.ylim(np.amin(self.solver.node_coord[:,1]),np.amax(self.solver.node_coord[:,1]))
+        plt.xlim(np.min(self.solver.node_coord[:,0]),np.max(self.solver.node_coord[:,0]))
+        plt.ylim(np.min(self.solver.node_coord[:,1]),np.max(self.solver.node_coord[:,1]))
         
         x = self.solver.centers[:,0]
         y = self.solver.centers[:,1]
@@ -74,16 +80,43 @@ class Post2D(PostProcessor):
             axins.set_yticks([])
 
         if save:
-            if filename is None: filename = self.solver.res_root / 'design.png'
+            if filename is None: filename = self.solver.res_dir / 'design.png'
             plt.savefig(filename)
         
     def animate(self, filename=None, colorful=False):
-        if filename is None: filename = self.solver.res_root / 'animation.gif'
+        if filename is None: filename = self.solver.res_dir / 'animation.gif'
         fig, ax = plt.subplots(dpi=300)
         anim = FuncAnimation(fig, partial(self.plot, colorful=colorful, save=False, fig=fig, ax=ax), frames=len(self.solver.rho_hist))
         anim.save(filename)
 
-class Post3D(PostProcessor):    
+    def plot_density(self, iteration=-1, filename=None, save=True, fig=None, ax=None):
+        if fig is None: fig, ax = plt.subplots(dpi=300)
+        ax.cla()
+        ax.set_aspect('equal')
+        plt.xlim(np.min(self.solver.node_coord[:,0]),np.max(self.solver.node_coord[:,0]))
+        plt.ylim(np.min(self.solver.node_coord[:,1]),np.max(self.solver.node_coord[:,1]))
+        
+        rho = self.solver.rho_hist[iteration]
+        for i in range(self.solver.num_elem):
+            xy = self.solver.node_coord[self.solver.elmnodes[i],:2]
+            ax.add_patch(Polygon(xy, facecolor='k', edgecolor=None, alpha=rho[i]))
+
+        if save:
+            if filename is None: filename = self.solver.res_dir / 'density.png'
+            plt.savefig(filename)
+
+    def animate_density(self, filename=None):
+        if filename is None: filename = self.solver.res_dir / 'animation_density.gif'
+        fig, ax = plt.subplots(dpi=300)
+        anim = FuncAnimation(fig, partial(self.plot_density, save=False, fig=fig, ax=ax), frames=len(self.solver.rho_hist))
+        anim.save(filename)
+
+class Post3D(PostProcessor):
+    def __init__(self, solver):
+        if solver.dim != 'SIMP3D' and solver.dim != '3D_layer' and solver.dim != '3D_free':
+            raise ValueError('solver does not contain a 3D optimization')
+        super().__init__(solver)
+
     def plot(self, iteration=-1, colorful=True, printability=False, elev=None, azim=None, domain_stl=None, filename=None, save=True, fig=None, ax=None):
         if ax is None:
             fig = plt.figure(dpi=500)
@@ -140,7 +173,7 @@ class Post3D(PostProcessor):
         ax.quiver(x, y, z, u, v, w, color=color, alpha=rho, pivot='middle', arrow_length_ratio=0, linewidth=0.8, length=1/self.quiver_scale)
         
         if save:
-            if filename is None: filename = self.solver.res_root / 'design.png'
+            if filename is None: filename = self.solver.res_dir / 'design.png'
             plt.savefig(filename)
         
     def plot_layer(self, iteration=-1, layer=0, colorful=False, printability=False, filename=None, save=True, fig=None, ax=None, zoom=None):
@@ -196,7 +229,7 @@ class Post3D(PostProcessor):
             axins.set_yticks([])
 
         if save:
-            if filename is None: filename = self.solver.res_root / f'design_layer{layer}.png'
+            if filename is None: filename = self.solver.res_dir / f'design_layer{layer}.png'
             plt.savefig(filename)
 
     def plot_fill(self, iteration=-1, threshold=0.8, filename=None, save=True, fig=None, ax=None):
@@ -240,11 +273,11 @@ class Post3D(PostProcessor):
                 ax.plot_surface(x, y, z, color=c, rstride=1, cstride=1, alpha=alpha)
                 
         if save:
-            if filename is None: filename = self.solver.res_root / 'design_fill.png'
+            if filename is None: filename = self.solver.res_dir / 'design_fill.png'
             plt.savefig(filename)
         
     def animate(self, filename=None, colorful=True, printability=False, elev=None, azim=None):
-        if filename is None: filename = self.solver.res_root / 'animation.gif'
+        if filename is None: filename = self.solver.res_dir / 'animation.gif'
         
         fig = plt.figure(dpi=500)
         ax = fig.add_axes([0,0,1,1], projection='3d')
@@ -252,13 +285,13 @@ class Post3D(PostProcessor):
         anim.save(filename)
         
     def animate_layer(self, layer=0, colorful=False, filename=None):
-        if filename is None: filename = self.solver.res_root / f'animation_layer{layer}.gif'
+        if filename is None: filename = self.solver.res_dir / f'animation_layer{layer}.gif'
         fig, ax = plt.subplots(dpi=300)
         anim = FuncAnimation(fig, partial(self.plot_layer, layer=layer, colorful=colorful, save=False, fig=fig, ax=ax), frames=len(self.solver.rho_hist))
         anim.save(filename)
         
     def animate_print(self, colorful=False, printability=False, filename=None):
-        if filename is None: filename = self.solver.res_root / 'animation_print.gif'
+        if filename is None: filename = self.solver.res_dir / 'animation_print.gif'
         fig, ax = plt.subplots(dpi=300)
         anim = FuncAnimation(fig, lambda layer: self.plot_layer(iteration=-1, layer=layer, colorful=colorful, printability=printability, save=False, fig=fig, ax=ax), frames=len(self.solver.layers))
         anim.save(filename)
