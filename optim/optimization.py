@@ -1,4 +1,3 @@
-import subprocess
 import time
 import os, shutil, glob
 from pathlib import Path
@@ -110,7 +109,7 @@ class TopOpt():
         x, y, z = print_direction
         euler1 = -np.arctan2(x,y) # -arctan(x/y), around z
         euler2 = -np.arctan2(np.hypot(x,y),z) # -arctan(sqrt(x^2+y^2)/z), around x'
-        euler = [euler1, euler2]
+        euler = [euler1, euler2] if self.dim != 'SIMP2D' and self.dim != '2D' else [0., 0.]
                      
         # slice domain in layers normal to print_direction
         elm_height = np.dot(self.centers, print_direction)
@@ -185,10 +184,10 @@ class TopOpt():
             self.penal      = 1
             self.penal_step = 0.5
             self.beta       = 0
-            self.beta_step  = 0.1
+            self.beta_step  = 0
         else:
             self.penal      = 3
-            self.beta       = 25 # overhang projection parameter
+            self.beta       = 25
         
     def run(self):
         try: self.mma
@@ -271,7 +270,7 @@ class TopOpt():
         solver_rebuilt.__dict__ = dict_rebuilt
 
         # recover callables
-        solver_rebuilt.dk         = solver_rebuilt.__get_dk()
+        solver_rebuilt.dk = solver_rebuilt.__get_dk()
         try:
             solver_rebuilt.mma.fobj   = solver_rebuilt.fea
             solver_rebuilt.mma.dfobj  = solver_rebuilt.sensitivities
@@ -325,17 +324,18 @@ class TopOpt():
         alpha = self.current_state['alpha']
 
         # Generate 1000 discrete materials
-        rho_disc = np.linspace(0.001, 1, 1000)
+        NUM_MAT = 1000
+        rho_disc = np.linspace(0.001, 1, NUM_MAT)
         Ex   = rho_disc**self.penal * self.Ex
         Ey   = rho_disc**self.penal * self.Ey
-        nuxy = self.nuxy * np.ones(1000)
-        nuyz = self.nuyz * np.ones(1000)
+        nuxy = self.nuxy * np.ones(NUM_MAT)
+        nuyz = self.nuyz * np.ones(NUM_MAT)
         Gxy  = rho_disc**self.penal * self.Gxy
         Gyz  = Ey/(2*(1+nuyz))
 
         mapdl.prep7()
         with mapdl.non_interactive:
-            for i in range(1000):
+            for i in range(NUM_MAT):
                 mapdl.mp('ex',i+1,Ex[i])
                 mapdl.mp('ey',i+1,Ey[i])
                 mapdl.mp('ez',i+1,Ey[i])
@@ -347,7 +347,7 @@ class TopOpt():
                 mapdl.mp('gyz',i+1,Gyz[i])
 
             for i in range(self.num_elem):
-                mapdl.emodif(i+1,'mat',int(1000*rho[i]))
+                mapdl.emodif(i+1,'mat',int(NUM_MAT*rho[i]))
                 mapdl.clocal(i+100,0,*self.centers[i,:],*np.rad2deg(self.print_euler),0)      # printing plane
                 mapdl.clocal(i+100,0,*[0.,0.,0.],np.rad2deg(theta[i]),np.rad2deg(alpha[i]),0) # material orientation
                 mapdl.emodif(i+1,'esys',i+100)
@@ -364,7 +364,7 @@ class TopOpt():
         mapdl.post1()
 
         c = []
-        for lc in range(self.num_load_cases): # TODO add multiple load cases
+        for lc in range(self.num_load_cases):
             mapdl.set(lc+1)
             mapdl.etable('energy','sene')
             energy = mapdl.get_array(entity='elem', item1='etable', it1num='energy')
@@ -503,21 +503,6 @@ class TopOpt():
         local   = [[] for _ in range(self.num_elem)]
         support = [[] for _ in range(self.num_elem)]
         
-        def distances(matrixA, matrixB):
-            A = np.matrix(matrixA)
-            B = np.matrix(matrixB)
-            Btrans = B.transpose()
-            vecProd = A * Btrans
-            SqA =  A.getA()**2
-            sumSqA = np.matrix(np.sum(SqA, axis=1))
-            sumSqAEx = np.tile(sumSqA.transpose(), (1, vecProd.shape[1]))    
-            SqB = B.getA()**2
-            sumSqB = np.sum(SqB, axis=1)
-            sumSqBEx = np.tile(sumSqB, (vecProd.shape[0], 1))    
-            SqED = sumSqBEx + sumSqAEx - 2*vecProd   
-            elmDis = (np.maximum(0,SqED).getA())**0.5
-            return np.matrix(elmDis)
-        
         for ei in range(self.num_elem):
             ii = np.where(abs(self.centers[:,0] - self.centers[ei][0]) < r_s)[0]
             jj = np.where(abs(self.centers[ii,1] - self.centers[ei][1]) < r_s)[0]
@@ -525,9 +510,10 @@ class TopOpt():
             ll = np.where(np.logical_not(ii[jj][kk] == ei))[0]
             
             v_ij = self.centers[ii[jj][kk][ll]] - self.centers[ei]
-            d = distances(self.centers[ei], self.centers[ii[jj][kk][ll]])
+            d = np.sqrt(np.sum(np.square(self.centers[ii[jj][kk][ll]] - self.centers[ei]), axis=1))
             v_ij = (v_ij.T/d).T
-            angles = np.arccos(v_ij @ -print_direction)
+            angles = v_ij @ -print_direction
+            angles = np.arccos(np.where(angles > 1, 1, np.where(angles < -1, -1, angles)))
             angles = np.asarray(angles).flatten()
             mm = np.where(angles <= np.pi/2 - overhang_angle + 1e-3)[0]
             
@@ -569,9 +555,12 @@ class TopOpt():
         
         self.__update_state(x, apply_filters=False)
         if self.overhang_constraint:
-            asyinit = 0.01
-            asyincr = 1.15
-            asydecr = 0.6
+            # asyinit = 0.01
+            # asyincr = 1.15
+            # asydecr = 0.6
+            asyinit = 0.2
+            asyincr = 1.2
+            asydecr = 0.7
         else:
             asyinit = 0.2
             asyincr = 1.2
@@ -630,14 +619,15 @@ class TopOpt():
             rho[rho > 1] = 1 # correct floating point error
 
             drhodphi = self.beta*np.exp(-self.beta*phi) + np.exp(-self.beta) # drhodphi[i] = drho_i/dphi_i
+            drhodphi *= self.density_filter.filter(np.ones_like(phi), np.ones_like(phi))
             dphidpsi = np.zeros((self.num_elem,self.num_elem)) # dphidpsi[i,j] = dphi_i/dpsi_j
+            drhodmu_s = self.betaT/np.cosh(self.betaT*(mu_s-self.T))**2/(np.tanh(self.betaT*self.T) + np.tanh(self.betaT*(1-self.T)))
             for layer in self.layers:
+                dphidpsi[layer,layer] = rho_s[layer]
                 for eli in layer:
-                    dphidpsi[eli,eli] = rho_s[eli]
-                    drhodmu_s = self.betaT/np.cosh(self.betaT*(mu_s[eli]-self.T))**2/(np.tanh(self.betaT*self.T) + np.tanh(self.betaT*(1-self.T)))
-                    dmu_sdphi_sup = 1/len(self.overhang_support[eli]) if len(self.overhang_support[eli]) > 0 else 0
-                    for elj in self.overhang_boundary[eli]:
-                        dphidpsi[eli,elj] = psi[eli] * drhodmu_s * dmu_sdphi_sup * np.sum(dphidpsi[self.overhang_support[eli],elj])
+                    if len(self.overhang_support[eli]) == 0: continue
+                    dmu_sdphi_sup = 1/len(self.overhang_support[eli])
+                    dphidpsi[eli,self.overhang_boundary[eli]] = psi[eli] * drhodmu_s[eli] * dmu_sdphi_sup * np.sum(dphidpsi[self.overhang_support[eli],:][:,self.overhang_boundary[eli]], axis=0)
 
             drhodpsi = np.diag(drhodphi) @ dphidpsi # drhodpsi[i,j] = drho_i/dpsi_j
 

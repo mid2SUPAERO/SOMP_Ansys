@@ -206,13 +206,14 @@ $$CO_{2,tot} = CO_{2,mat} + CO_{2,use}$$
 
 ## Dependencies
 
-The code was tested with the following libraries in Python >= 3.7:
+The code was tested with the following libraries in Python >= 3.9:
 - NumPy >= 1.21.5
 - SciPy >= 1.6.2
 - Matplotlib >= 3.5.1
 - jsonpickle >= 3.0.2
 - pyansys 2023.2.11:
   - ansys-mapdl-core
+  - ansys-dpf-core
 
 Examples may have additional dependencies:
 - mpi4py 3.0.1
@@ -420,7 +421,18 @@ For 3D optimizations: `Post3D(solver)`
 
 - `animate(filename=None, colorful=True, printability=False, elev=None, azim=None)`
 
-  Creates an animation where each frame is the `plot()` for one iteration
+  Creates an animation where each frame is the `plot()` for an iteration
+
+- `plot_fibers(iteration=-1, layer=None, elev=None, azim=None, filename=None, save=True, fig=None, ax=None)`
+
+  Plots continuous fibers obtained as streamlines of the orientation field at iteration `iteration`
+
+  - `layer`: only for `Post3D`. If `None`, plots all layers in a 3D plot, colored from blue (bottom layers) to red (top layers). If a tuple of integers, plots the selected layers in a 3D plot with the same color scheme. If integer, plots the selected layer in a 2D plot, analogous to `Post2D`
+  - `elev`, `azim`: only for `Post3D`. Angles defining the point of view
+
+- `animate_fibers(layer=None, filename=None)`
+
+  Creates an animation where each frame is the `plot_fibers()` for an iteration
 
 ### Functions specific to `Post2D`
 
@@ -436,15 +448,15 @@ For 3D optimizations: `Post3D(solver)`
 
 - `animate_layer(layer=0, colorful=False, filename=None)`
 
-  Creates an animation where each frame is the `plot_layer(layer)` for one iteration
+  Creates an animation where each frame is the `plot_layer(layer)` for a iteration
 
-- `animate_print(colorful=False, printability=False, filename=None)`
+- `animate_print(fibers=True, colorful=False, printability=False, filename=None)`
 
-  Creates an animation where each frame is the `plot_layer(layer)` for one layer, in the final configuration
+  Creates an animation where each frame is a layer plot in the final configuration. If `fibers` is True, uses `plot_fibers(layer)` and if `fibers` is False, cuses `plot_layer(layer)`
 
-- `plot_fill(iteration=-1, threshold=0.8, filename=None, save=True, fig=None, ax=None)`
+- `plot_iso(self, iteration=-1, threshold=0.8, elev=30, azim=-60, filename=None)`
 
-  Plots each eleemnt with density greater than `threshold` as a box. Not efficient, makes a plot of every face of every element
+  Plots the isosurface of density greater or equal to `threshold`. Elemental data is interpolated to nodes by PyDPF (Ansys Data Procssing Framework), which needs the results stored in the `.rst` file.
 
 ## References
 - A. Castro Almeida, E. Duriez, F. Lachaud, J. Morlier. New topology optimization for low CO2 footprint AFP composite structures, Poster session, WCSMO 2023.
