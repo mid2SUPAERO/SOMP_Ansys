@@ -442,6 +442,10 @@ For 3D optimizations: `Post3D(solver)`
 
 ### Functions specific to `Post3D`
 
+- `plot_layer_density(iteration=-1, layer=0, filename=None, save=True, fig=None, ax=None)`
+
+  Plots the deinsties in the `layer`-th layer, analogous to `plot_density()` for `Plot2D`
+
 - `plot_layer(iteration=-1, layer=0, colorful=False, printability=False, filename=None, save=True, fig=None, ax=None, zoom=None)`
 
   Plots the `layer`-th layer, analogous to `plot()` for `Plot2D`

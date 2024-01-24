@@ -353,15 +353,15 @@ class TopOpt():
                 mapdl.emodif(i+1,'esys',i+100)
                 mapdl.csys(0)
         
-        mapdl.slashsolu()
+            mapdl.slashsolu()
 
-        if self.load_cases is None:
-            mapdl.solve()
-        else:
-            mapdl.kuse(1)
-            mapdl.lssolve(1,self.num_load_cases,1)
+            if self.load_cases is None:
+                mapdl.solve()
+            else:
+                mapdl.kuse(1)
+                mapdl.lssolve(1,self.num_load_cases,1)
 
-        mapdl.post1()
+            mapdl.post1()
 
         c = []
         for lc in range(self.num_load_cases):

@@ -111,7 +111,7 @@ class Post2D(PostProcessor):
         xx, yy = np.meshgrid(xx, yy)
 
         inside = np.full(xx.shape, False)
-        for i in idx:
+        for i in range(self.solver.num_elem):
             center = self.solver.centers[:2,i].T
             xy = np.array([center + np.array([-self.solver.elem_size, -self.solver.elem_size]),
                             center + np.array([-self.solver.elem_size, self.solver.elem_size]),
@@ -122,9 +122,9 @@ class Post2D(PostProcessor):
             inside |= inside_elm
         outside = np.logical_not(inside)
 
-        u_interp = interpolate.griddata(self.solver.centers[:2,idx].T, u, (xx,yy), method='nearest')
-        v_interp = interpolate.griddata(self.solver.centers[:2,idx].T, v, (xx,yy), method='nearest')
-        rho_interp = interpolate.griddata(self.solver.centers[:2,idx].T, rho, (xx,yy), method='nearest')
+        u_interp = interpolate.griddata(self.solver.centers[:2,:].T, u, (xx,yy), method='nearest')
+        v_interp = interpolate.griddata(self.solver.centers[:2,:].T, v, (xx,yy), method='nearest')
+        rho_interp = interpolate.griddata(self.solver.centers[:2,:].T, rho, (xx,yy), method='nearest')
         rho_interp[outside] = 0
 
         ax.streamplot(xx, yy, u_interp, v_interp, arrowstyle='-', linewidth=1, density=3, color=rho_interp, cmap=cm.binary)
@@ -225,6 +225,39 @@ class Post3D(PostProcessor):
         if save:
             if filename is None: filename = self.solver.res_dir / 'design.png'
             plt.savefig(filename)
+
+    def plot_layer_density(self, iteration=-1, layer=0, filename=None, save=True, fig=None, ax=None):
+        if fig is None: fig, ax = plt.subplots(dpi=300)
+                
+        idx = self.solver.layers[layer]
+        # transformation to the printing coordinate system
+        euler1, euler2 = self.solver.print_euler # rotations around z and x' respectively
+        T = np.array([[1,0,0],
+                      [0,np.cos(euler2),np.sin(euler2)],
+                      [0,-np.sin(euler2),np.cos(euler2)]]) @ \
+            np.array([[np.cos(euler1),np.sin(euler1),0],
+                      [-np.sin(euler1),np.cos(euler1),0],
+                      [0,0,1]])
+        
+        plot_lim = T @ self.solver.node_coord.T
+        
+        ax.cla()
+        ax.set_aspect('equal')
+        plt.xlim(np.amin(plot_lim[0,:]),np.amax(plot_lim[0,:]))
+        plt.ylim(np.amin(plot_lim[1,:]),np.amax(plot_lim[1,:]))
+        plt.title('Layer {}/{}'.format(layer+1,len(self.solver.layers)))
+        
+        print_coord = T @ self.solver.centers[idx,:].T
+        x, y = print_coord[0,:], print_coord[1,:]
+        
+        rho   = self.solver.rho_hist[iteration]
+        for i in idx:
+            xy = self.solver.node_coord[self.solver.elmnodes[i],:2]
+            ax.add_patch(Polygon(xy, facecolor='k', edgecolor=None, alpha=rho[i]))
+
+        if save:
+            if filename is None: filename = self.solver.res_dir / f'density_layer{layer}.png'
+            plt.savefig(filename)
         
     def plot_layer(self, iteration=-1, layer=0, colorful=False, printability=False, filename=None, save=True, fig=None, ax=None, zoom=None):
         if fig is None: fig, ax = plt.subplots(dpi=300)
@@ -282,7 +315,7 @@ class Post3D(PostProcessor):
             if filename is None: filename = self.solver.res_dir / f'orientations_layer{layer}.png'
             plt.savefig(filename)
 
-    def plot_fibers(self, iteration=-1, layer=None, elev=None, azim=None, filename=None, save=True, fig=None, ax=None):
+    def plot_fibers(self, iteration=-1, layer=None, elev=None, azim=None, domain_stl=None, filename=None, save=True, fig=None, ax=None):
         if filename is None:
             if layer is None:
                 filename = self.solver.res_dir / f'fibers.png'
@@ -323,6 +356,10 @@ class Post3D(PostProcessor):
         ax.cla()
         if plotted_layers == 1: plt.title('Layer {}/{}'.format(layer[0]+1,len(self.solver.layers)))
 
+        if plotted_layers > 1 and domain_stl is not None:
+            domain_mesh = mesh.Mesh.from_file(domain_stl)
+            ax.add_collection3d(mplot3d.art3d.Poly3DCollection(domain_mesh.vectors, alpha=0.1))
+
         for layer in layer:
             if plotted_layers > 1 : fig_tmp, ax_tmp = plt.subplots()
     
@@ -360,7 +397,7 @@ class Post3D(PostProcessor):
                 for line in res.lines.get_paths():
                     x = line.vertices.T[0]
                     y = line.vertices.T[1]
-                    z = self.solver.layer_thk*(layer+1)/2
+                    z = self.solver.layer_thk*(layer+0.5)
                     rho_plot = interpolate.griddata(np.vstack((xx.flatten(),yy.flatten())).T, rho_interp.flatten(), (x[0],y[0]), method='nearest')
                     ax.plot(x, y, z, color=cmap(norm(layer)), alpha=rho_plot, linewidth=1)
             else:
