@@ -226,7 +226,7 @@ Examples may have additional dependencies:
 - `global3d.py`: example of a complete 3D optimization. Launches multiple optimizations with different materials. Results in `examples/global3d.out`, visualized with `global3d_plots.py`
 - `NaturalFibers.ipynb`: Jupyter notebook comparing different materials
 - `bridge.py`: example of a complete 2D optimization. Uses MPI to launch parallel processes with different initial orientations
-- `Bracket.ipynb`: Jupyter notebook with a more complex 3D optimization
+- `Bracket_material_selection.ipynb`, `Bracket.ipynb`, `Bracket_printing_direction`, `Bracket_refine`: Jupyter notebook with the optimization steps for the design of a 3D structure
 
 ## Model files
 

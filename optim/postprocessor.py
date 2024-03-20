@@ -182,9 +182,7 @@ class Post3D(PostProcessor):
             domain_mesh = mesh.Mesh.from_file(domain_stl)
             ax.add_collection3d(mplot3d.art3d.Poly3DCollection(domain_mesh.vectors, alpha=0.1))
         
-        x = self.solver.centers[:,0]
-        y = self.solver.centers[:,1]
-        z = self.solver.centers[:,2]
+        x, y, z = self.solver.centers.T
         theta = self.solver.theta_hist[iteration]
         alpha = self.solver.alpha_hist[iteration]
         
@@ -192,16 +190,9 @@ class Post3D(PostProcessor):
         u = np.cos(alpha)*np.cos(theta)
         v = np.cos(alpha)*np.sin(theta)
         w = np.sin(alpha)
-        
+
         # orientations in the global coordinate system
-        euler1, euler2 = self.solver.print_euler # rotations around z and x' respectively
-        T = np.array([[np.cos(euler1),-np.sin(euler1),0],
-                      [np.sin(euler1),np.cos(euler1),0],
-                      [0,0,1]]) @ \
-            np.array([[1,0,0],
-                      [0,np.cos(euler2),-np.sin(euler2)],
-                      [0,np.sin(euler2),np.cos(euler2)]])
-        u, v, w = np.dot(T,[u,v,w])
+        u, v, w = self.__printing2global(np.vstack((u,v,w)).T).T
         
         rho = self.solver.rho_hist[iteration]
         if printability:
@@ -211,12 +202,12 @@ class Post3D(PostProcessor):
             origin = np.where(self.solver.print_direction<0, maxdim, 0)
             plt.quiver(*origin, *self.solver.print_direction, label='Printing direction', color='r', length=0.2*np.max(maxdim), linewidth=2)
         elif colorful:
-            color = [(np.abs(w[i]),np.abs(u[i]),np.abs(v[i])) for i in range(len(u))]
+            color = [(np.abs(u[i]),np.abs(v[i]),np.abs(w[i])) for i in range(len(u))]
             
             # plot coordinate system
-            plt.quiver(*mindim, 1., 0., 0., color=(0.,1.,0.), length=0.1*np.max(maxdim), linewidth=2)
-            plt.quiver(*mindim, 0., 1., 0., color=(0.,0.,1.), length=0.1*np.max(maxdim), linewidth=2)
-            plt.quiver(*mindim, 0., 0., 1., color=(1.,0.,0.), length=0.1*np.max(maxdim), linewidth=2)
+            plt.quiver(*mindim, 1., 0., 0., color=(1.,0.,0.), length=0.1*np.max(maxdim), linewidth=2)
+            plt.quiver(*mindim, 0., 1., 0., color=(0.,1.,0.), length=0.1*np.max(maxdim), linewidth=2)
+            plt.quiver(*mindim, 0., 0., 1., color=(0.,0.,1.), length=0.1*np.max(maxdim), linewidth=2)
         else:
             color = 'black'     
             
@@ -230,25 +221,15 @@ class Post3D(PostProcessor):
         if fig is None: fig, ax = plt.subplots(dpi=300)
                 
         idx = self.solver.layers[layer]
-        # transformation to the printing coordinate system
-        euler1, euler2 = self.solver.print_euler # rotations around z and x' respectively
-        T = np.array([[1,0,0],
-                      [0,np.cos(euler2),np.sin(euler2)],
-                      [0,-np.sin(euler2),np.cos(euler2)]]) @ \
-            np.array([[np.cos(euler1),np.sin(euler1),0],
-                      [-np.sin(euler1),np.cos(euler1),0],
-                      [0,0,1]])
-        
-        plot_lim = T @ self.solver.node_coord.T
+        plot_lim = self.__global2printing(self.solver.node_coord)
         
         ax.cla()
         ax.set_aspect('equal')
-        plt.xlim(np.amin(plot_lim[0,:]),np.amax(plot_lim[0,:]))
-        plt.ylim(np.amin(plot_lim[1,:]),np.amax(plot_lim[1,:]))
+        plt.xlim(np.min(plot_lim[:,0]),np.max(plot_lim[:,0]))
+        plt.ylim(np.min(plot_lim[:,1]),np.max(plot_lim[:,1]))
         plt.title('Layer {}/{}'.format(layer+1,len(self.solver.layers)))
         
-        print_coord = T @ self.solver.centers[idx,:].T
-        x, y = print_coord[0,:], print_coord[1,:]
+        x, y, _ = self.__global2printing(self.solver.centers[idx,:]).T
         
         rho   = self.solver.rho_hist[iteration]
         for i in idx:
@@ -263,26 +244,16 @@ class Post3D(PostProcessor):
         if fig is None: fig, ax = plt.subplots(dpi=300)
                 
         idx = self.solver.layers[layer]
-        # transformation to the printing coordinate system
-        euler1, euler2 = self.solver.print_euler # rotations around z and x' respectively
-        T = np.array([[1,0,0],
-                      [0,np.cos(euler2),np.sin(euler2)],
-                      [0,-np.sin(euler2),np.cos(euler2)]]) @ \
-            np.array([[np.cos(euler1),np.sin(euler1),0],
-                      [-np.sin(euler1),np.cos(euler1),0],
-                      [0,0,1]])
-        
-        plot_lim = T @ self.solver.node_coord.T
+        plot_lim = self.__global2printing(self.solver.node_coord)
         
         ax.cla()
         ax.set_aspect('equal')
-        plt.xlim(np.amin(plot_lim[0,:]),np.amax(plot_lim[0,:]))
-        plt.ylim(np.amin(plot_lim[1,:]),np.amax(plot_lim[1,:]))
+        plt.xlim(np.min(plot_lim[:,0]),np.max(plot_lim[:,0]))
+        plt.ylim(np.min(plot_lim[:,1]),np.max(plot_lim[:,1]))
         plt.title('Layer {}/{}'.format(layer+1,len(self.solver.layers)))
         
-        print_coord = T @ self.solver.centers[idx,:].T
-        x, y = print_coord[0,:], print_coord[1,:]
-        
+        x, y, _ = self.__global2printing(self.solver.centers[idx,:]).T
+
         rho   = self.solver.rho_hist[iteration][idx]
         theta = self.solver.theta_hist[iteration][idx]
         u = np.cos(theta)
@@ -315,7 +286,7 @@ class Post3D(PostProcessor):
             if filename is None: filename = self.solver.res_dir / f'orientations_layer{layer}.png'
             plt.savefig(filename)
 
-    def plot_fibers(self, iteration=-1, layer=None, elev=None, azim=None, domain_stl=None, filename=None, save=True, fig=None, ax=None):
+    def plot_fibers(self, iteration=-1, layer=None, global_frame=False, elev=None, azim=None, roll=None, domain_stl=None, filename=None, save=True, fig=None, ax=None):
         if filename is None:
             if layer is None:
                 filename = self.solver.res_dir / f'fibers.png'
@@ -328,37 +299,39 @@ class Post3D(PostProcessor):
         norm = colors.Normalize(vmin=min(layer), vmax=max(layer))
         cmap = cm.jet if plotted_layers > 1 else cm.Greys_r
 
-        # transformation to the printing coordinate system
-        euler1, euler2 = self.solver.print_euler # rotations around z and x' respectively
-        T = np.array([[1,0,0],
-                    [0,np.cos(euler2),np.sin(euler2)],
-                    [0,-np.sin(euler2),np.cos(euler2)]]) @ \
-            np.array([[np.cos(euler1),np.sin(euler1),0],
-                    [-np.sin(euler1),np.cos(euler1),0],
-                    [0,0,1]])
-        
-        plot_lim = T @ self.solver.node_coord.T
-        print_coord = T @ self.solver.centers.T
+        plot_lim    = self.solver.node_coord if global_frame else self.__global2printing(self.solver.node_coord)
+        print_coord = self.solver.centers if global_frame else self.__global2printing(self.solver.centers)
 
         if plotted_layers > 1:
             if ax is None:
                 fig = plt.figure(dpi=500)
                 ax = fig.add_axes([0,0,1,1], projection='3d')
-            maxdim = np.max(self.solver.node_coord, axis=0)
-            mindim = np.min(self.solver.node_coord, axis=0)
+            maxdim = np.max(plot_lim, axis=0)
+            mindim = np.min(plot_lim, axis=0)
             ax.set_box_aspect((maxdim-mindim))
-            ax.view_init(elev=elev, azim=azim)
+            ax.axes.set_xlim3d(left=0, right=maxdim[0]-mindim[0])
+            ax.axes.set_ylim3d(bottom=0, top=maxdim[1]-mindim[1])
+            ax.axes.set_zlim3d(bottom=0, top=maxdim[2]-mindim[2])
+            ax.view_init(elev=elev, azim=azim, roll=roll)
         else:
             if ax is None: fig, ax = plt.subplots(dpi=300)
             ax.set_aspect('equal')
-            plt.xlim(np.amin(plot_lim[0,:]),np.amax(plot_lim[0,:]))
-            plt.ylim(np.amin(plot_lim[1,:]),np.amax(plot_lim[1,:]))
+            plt.xlim(np.min(plot_lim[:,0]),np.max(plot_lim[:,0]))
+            plt.ylim(np.min(plot_lim[:,1]),np.max(plot_lim[:,1]))
         ax.cla()
         if plotted_layers == 1: plt.title('Layer {}/{}'.format(layer[0]+1,len(self.solver.layers)))
 
         if plotted_layers > 1 and domain_stl is not None:
             domain_mesh = mesh.Mesh.from_file(domain_stl)
-            ax.add_collection3d(mplot3d.art3d.Poly3DCollection(domain_mesh.vectors, alpha=0.1))
+            if not global_frame:
+                euler1, euler2 = self.solver.print_euler
+                domain_mesh.rotate([0,0,1],-euler1)
+                domain_mesh.rotate([1,0,0],-euler2)
+            offset_x, offset_y, offset_z = np.min(domain_mesh.x)-np.min(self.solver.node_coord[:,0]), np.min(domain_mesh.y)-np.min(self.solver.node_coord[:,1]), np.min(domain_mesh.z)-np.min(self.solver.node_coord[:,2])
+            domain_mesh.x -= offset_x
+            domain_mesh.y -= offset_y
+            domain_mesh.z -= offset_z
+            ax.add_collection3d(mplot3d.art3d.Poly3DCollection(domain_mesh.vectors, alpha=0.1, linewidth=1))
 
         for layer in layer:
             if plotted_layers > 1 : fig_tmp, ax_tmp = plt.subplots()
@@ -369,13 +342,13 @@ class Post3D(PostProcessor):
             u = np.cos(theta)
             v = np.sin(theta)
             
-            xx = np.linspace(np.amin(plot_lim[0,:]), np.amax(plot_lim[0,:]), 50)
-            yy = np.linspace(np.amin(plot_lim[1,:]), np.amax(plot_lim[1,:]), 50)
+            xx = np.linspace(np.min(plot_lim[:,0]), np.max(plot_lim[:,0]), 50)
+            yy = np.linspace(np.min(plot_lim[:,1]), np.max(plot_lim[:,1]), 50)
             xx, yy = np.meshgrid(xx, yy)
 
             inside = np.full(xx.shape, False)
             for i in idx:
-                center = print_coord[:2,i].T
+                center = print_coord[i,:2].T
                 xy = np.array([center + np.array([-self.solver.elem_size, -self.solver.elem_size]),
                                 center + np.array([-self.solver.elem_size, self.solver.elem_size]),
                                 center + np.array([self.solver.elem_size, self.solver.elem_size]),
@@ -385,9 +358,9 @@ class Post3D(PostProcessor):
                 inside |= inside_elm
             outside = np.logical_not(inside)
 
-            u_interp = interpolate.griddata(print_coord[:2,idx].T, u, (xx,yy), method='nearest')
-            v_interp = interpolate.griddata(print_coord[:2,idx].T, v, (xx,yy), method='nearest')
-            rho_interp = interpolate.griddata(print_coord[:2,idx].T, rho, (xx,yy), method='nearest')
+            u_interp = interpolate.griddata(print_coord[idx,:2], u, (xx,yy), method='nearest')
+            v_interp = interpolate.griddata(print_coord[idx,:2], v, (xx,yy), method='nearest')
+            rho_interp = interpolate.griddata(print_coord[idx,:2], rho, (xx,yy), method='nearest')
             rho_interp[outside] = 0
 
             if plotted_layers > 1:
@@ -397,8 +370,16 @@ class Post3D(PostProcessor):
                 for line in res.lines.get_paths():
                     x = line.vertices.T[0]
                     y = line.vertices.T[1]
-                    z = self.solver.layer_thk*(layer+0.5)
+                    z = self.solver.layer_thk*(layer+0.5) * np.ones_like(x)
+
                     rho_plot = interpolate.griddata(np.vstack((xx.flatten(),yy.flatten())).T, rho_interp.flatten(), (x[0],y[0]), method='nearest')
+
+                    if global_frame:
+                        x, y, z = self.__printing2global(np.vstack((x,y,np.zeros_like(x))).T).T
+                        # x += self.solver.print_direction[0] * self.solver.layer_thk*(layer+0.5)
+                        # y += self.solver.print_direction[1] * self.solver.layer_thk*(layer+0.5)
+                        # z += self.solver.print_direction[2] * self.solver.layer_thk*(layer+0.5)
+
                     ax.plot(x, y, z, color=cmap(norm(layer)), alpha=rho_plot, linewidth=1)
             else:
                 ax.streamplot(xx, yy, u_interp, v_interp, arrowstyle='-', linewidth=1, density=3, color=rho_interp, cmap=cm.binary)
@@ -476,3 +457,25 @@ class Post3D(PostProcessor):
         else:
             anim = FuncAnimation(fig, lambda layer: self.plot_layer(iteration=-1, layer=layer, colorful=colorful, printability=printability, save=False, fig=fig, ax=ax), frames=len(self.solver.layers))
         anim.save(filename)
+
+    # coord.shape = (npoints, 3)
+    def __printing2global(self, coord):
+        euler1, euler2 = self.solver.print_euler # rotations around x (-euler2) and z' (-euler1) respectively
+        T = np.array([[np.cos(-euler1),-np.sin(-euler1),0],
+                    [np.sin(-euler1),np.cos(-euler1),0],
+                    [0,0,1]]) @ \
+            np.array([[1,0,0],
+                    [0,np.cos(-euler2),-np.sin(-euler2)],
+                    [0,np.sin(-euler2),np.cos(-euler2)]])
+            
+        return T.dot(coord.T).T
+
+    def __global2printing(self, coord):
+        euler1, euler2 = self.solver.print_euler # rotations around z (euler1) and x' (euler2) respectively
+        T = np.array([[1,0,0],
+                    [0,np.cos(euler2),-np.sin(euler2)],
+                    [0,np.sin(euler2),np.cos(euler2)]]) @ \
+            np.array([[np.cos(euler1),-np.sin(euler1),0],
+                    [np.sin(euler1),np.cos(euler1),0],
+                    [0,0,1]])
+        return T.dot(coord.T).T

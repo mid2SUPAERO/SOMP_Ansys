@@ -66,13 +66,17 @@ class TopOpt():
         ]
         if self.num_elem is None:
             self.num_elem, self.num_node, self.centers, self.elem_size, self.elemvol, self.elmnodes, self.node_coord = self.__get_mesh_data()
+
+        self.print_direction, self.print_euler, self.layers, self.layer_thk, self.overhang_angle, self.r_s, self.T, self.betaT, self.overhang_support = [
+            kwargs.pop(x,None) for x in ['print_direction','print_euler', 'layers', 'layer_thk', 'overhang_angle', 'r_s', 'T', 'betaT', 'overhang_support']
+        ]
         
         # initial setup with default parameters
         self.set_material()
         self.set_volfrac()
         self.set_filters()
         self.set_solid_elem()
-        self.set_print_direction()
+        if self.print_direction is None: self.set_print_direction()
         self.set_initial_conditions()
         self.set_optim_options()
         
@@ -100,7 +104,7 @@ class TopOpt():
     def set_solid_elem(self, solid_elem=[]):
         self.solid_elem = solid_elem
             
-    def set_print_direction(self, *, print_direction=(0.,0.,1.), overhang_angle=45, overhang_constraint=False):
+    def set_print_direction(self, *, print_direction=(0.,0.,1.), overhang_angle=45):
         # normalize print_direction
         print_direction = np.array(print_direction)
         print_direction /= np.linalg.norm(print_direction)
@@ -113,28 +117,26 @@ class TopOpt():
                      
         # slice domain in layers normal to print_direction
         elm_height = np.dot(self.centers, print_direction)
-        elm_layer  = (elm_height/self.elem_size).astype(int)
+        bottom     = np.min(elm_height)
+        elm_layer  = ((elm_height-bottom)/self.elem_size).astype(int)
         layers     = [np.where(elm_layer==i)[0] for i in range(np.max(elm_layer)+1)]
         
         # define neighborhoods for overhang projection
         r_s = 1.5*self.r_rho
         if r_s > 0:
-            local, support, boundary = self.__overhang_neighborhoods(r_s, layers, print_direction, np.deg2rad(overhang_angle))
+            support = self.__overhang_neighborhood(r_s, layers, print_direction, np.deg2rad(overhang_angle))
                      
         self.print_direction     = print_direction
         self.print_euler         = euler
         self.layers              = layers
         self.layer_thk           = self.elem_size
         self.overhang_angle      = np.deg2rad(overhang_angle)
-        self.overhang_constraint = overhang_constraint
         self.r_s                 = r_s
         
         if r_s > 0:
-            self.T                   = 1/(np.pi/2-self.overhang_angle) * self.elem_size/(2*r_s) # Heaviside threshold
+            self.T                   = 3/2/np.pi/(1-np.sin(self.overhang_angle)) * self.elem_size**2/(r_s**2) # Heaviside threshold
             self.betaT               = 25 # Heaviside parameter
-            self.overhang_local      = local
             self.overhang_support    = support
-            self.overhang_boundary   = boundary
 
         # update derivative function (dependent on print_direction)
         self.dk = self.__get_dk()
@@ -183,11 +185,8 @@ class TopOpt():
         if continuation:
             self.penal      = 1
             self.penal_step = 0.5
-            self.beta       = 0
-            self.beta_step  = 0
         else:
             self.penal      = 3
-            self.beta       = 25
         
     def run(self):
         try: self.mma
@@ -195,7 +194,7 @@ class TopOpt():
     
         t0 = time.time()
         
-        self.mapdl = pymapdl.launch_mapdl(jobname=self.jobname, run_location=self.res_dir.absolute(), override=True)
+        self.mapdl = pymapdl.launch_mapdl(jobname=self.jobname, run_location=self.res_dir.absolute(), override=True, start_timeout=200)
         self.mapdl.resume(fname=self.inputfile.absolute())
 
         for it in range(self.max_iter):
@@ -206,7 +205,7 @@ class TopOpt():
                 try:
                     xnew = self.mma.iterate(self.current_state['x'])
                 except pymapdl.errors.MapdlExitedError:
-                    self.mapdl = pymapdl.launch_mapdl(jobname=self.jobname, run_location=self.res_dir.absolute(), override=True)
+                    self.mapdl = pymapdl.launch_mapdl(jobname=self.jobname, run_location=self.res_dir.absolute(), override=True, start_timeout=200)
                     self.mapdl.resume(fname=self.inputfile.absolute())
                 else:
                     break
@@ -217,11 +216,10 @@ class TopOpt():
                 if not self.continuation:
                     break
                 
-                if self.get_greyness() < self.max_grey and self.penal > 3:
+                if self.get_greyness() < self.max_grey and self.penal >= 3:
                     break
                 else:
                     self.penal += self.penal_step
-                    self.beta  += self.beta_step
                 
             self.__update_state(xnew)
         else:        
@@ -282,11 +280,7 @@ class TopOpt():
         return solver_rebuilt
     
     def get_printability(self):
-        if self.overhang_constraint:
-            rho_s = self.current_state['rho_s']
-        else:
-            rho_s = self.__print_eval(self.current_state['rho'])[1]
-        
+        rho_s = self.__print_eval(self.current_state['rho'])[1]
         score = np.average(rho_s, weights=self.current_state['rho'])
         elm_printability = rho_s > 0.5
 
@@ -316,7 +310,7 @@ class TopOpt():
         else: # running outside optimization
             self.__create_optimizer()
             self.__update_state(x)
-            mapdl = pymapdl.launch_mapdl(jobname=self.jobname, run_location=self.res_dir.absolute(), override=True)
+            mapdl = pymapdl.launch_mapdl(jobname=self.jobname, run_location=self.res_dir.absolute(), override=True, start_timeout=200)
             mapdl.resume(fname=self.inputfile.absolute())
 
         rho   = self.current_state['rho']
@@ -363,7 +357,8 @@ class TopOpt():
 
             mapdl.post1()
 
-        c = []
+        c     = []
+        cnorm = []
         for lc in range(self.num_load_cases):
             mapdl.set(lc+1)
             mapdl.etable('energy','sene')
@@ -375,30 +370,33 @@ class TopOpt():
                     mapdl.get_array('node', item1='u', it1num='z'),
                 )).T
 
-            c += [2*energy.sum()]
-            self.comp_hist[lc]   += [c[-1]]
-            self.energy_hist[lc] += [energy]
-            self.disp_hist[lc]   += [disp]
+            c     += [2*energy.sum()]
+            cnorm += [np.sum(2*energy*rho**3/rho**self.penal)]
+            self.comp_hist[lc]      += [c[-1]]
+            self.comp_norm_hist[lc] += [cnorm[-1]]
+            self.energy_hist[lc]    += [energy]
+            self.disp_hist[lc]      += [disp]
             
             if self.echo:
                 print('c{} = {:10.4f}'.format('' if self.num_load_cases == 1 else '_' + str(lc+1), self.comp_hist[lc][-1]),
                     end='' if lc == self.num_load_cases-1 else ', ')
             
         if x is not None: mapdl.exit()
-        comp_max = np.linalg.norm(np.array(c), ord=self.comp_max_order)
+        comp_max      = np.linalg.norm(np.array(c), ord=self.comp_max_order)
+        comp_norm_max = np.linalg.norm(np.array(cnorm), ord=self.comp_max_order)
 
         # Save history
-        self.rho_hist      += [rho]
-        self.theta_hist    += [theta]
-        self.alpha_hist    += [alpha]
-        self.comp_max_hist += [comp_max]
-        self.penal_hist    += [self.penal]
-        self.beta_hist     += [self.beta]
+        self.rho_hist           += [rho]
+        self.theta_hist         += [theta]
+        self.alpha_hist         += [alpha]
+        self.comp_max_hist      += [comp_max]
+        self.comp_norm_max_hist += [comp_norm_max]
+        self.penal_hist         += [self.penal]
 
         self.fea_time += time.time() - t0
         if self.echo: print()
 
-        return comp_max
+        return comp_norm_max
     
     def sensitivities(self):
         t0 = time.time()
@@ -416,11 +414,6 @@ class TopOpt():
             dcidrho = self.density_filter.filter(rho, dcidrho)
             dcdrho += self.comp_hist[lc][-1]**(self.comp_max_order-1) * dcidrho
         dcdrho *= self.comp_max_hist[-1]**(1-self.comp_max_order)
-        
-        if self.overhang_constraint:
-            drhodpsi = self.current_state['drhodpsi']
-            dcdpsi = dcdrho @ drhodpsi
-            dcdrho = dcdpsi # renaming to fit into the standard algorithm
         
         if self.dim == 'SIMP2D' or self.dim == 'SIMP3D':
             self.deriv_time += time.time() - t0
@@ -464,14 +457,11 @@ class TopOpt():
         dcons = np.zeros_like(self.current_state['x'])
         dcons[:self.num_elem] = self.elemvol/self.volfrac/np.sum(self.elemvol) # dg/drho
 
-        if self.overhang_constraint: # design variable in x is psi instead of rho
-            dcons[:self.num_elem] @= self.current_state['drhodpsi'] # dg/dpsi
-
         return dcons
     
     # -------------------------------------------- Internal functions --------------------------------------------  
     def __get_mesh_data(self):
-        mapdl = pymapdl.launch_mapdl(jobname=self.jobname, run_location=self.res_dir.absolute(), override=True)
+        mapdl = pymapdl.launch_mapdl(jobname=self.jobname, run_location=self.res_dir.absolute(), override=True, start_timeout=200)
         mapdl.resume(fname=self.inputfile.absolute())
         
         num_elem   = mapdl.mesh.n_elem
@@ -499,8 +489,7 @@ class TopOpt():
         
         return num_elem, num_node, centers, elem_size, elemvol, elmnodes, node_coord
     
-    def __overhang_neighborhoods(self, r_s, layers, print_direction, overhang_angle):
-        local   = [[] for _ in range(self.num_elem)]
+    def __overhang_neighborhood(self, r_s, layers, print_direction, overhang_angle):
         support = [[] for _ in range(self.num_elem)]
         
         for ei in range(self.num_elem):
@@ -516,24 +505,13 @@ class TopOpt():
             angles = np.arccos(np.where(angles > 1, 1, np.where(angles < -1, -1, angles)))
             angles = np.asarray(angles).flatten()
             mm = np.where(angles <= np.pi/2 - overhang_angle + 1e-3)[0]
-            
-            local[ei]   = ii[jj][kk]
+
             support[ei] = ii[jj][kk][ll][mm]
-        
-        boundary = support.copy()
-        for layer in layers[2:]:
-            for ei in layer:
-                for ej in support[ei]:
-                    boundary[ei] = np.concatenate((boundary[ei], boundary[ej]))
-                boundary[ei] = np.unique(boundary[ei])
                         
-        return local, support, boundary
+        return support
 
     def __create_optimizer(self):
         rho = self.volfrac * np.ones(self.num_elem)
-
-        if self.overhang_constraint: # all elements filled to avoid numerical problems caused by very high compliances
-            rho = np.ones(self.num_elem)
         
         x    = rho
         xmin = np.ones_like(rho) * self.rho_min
@@ -554,29 +532,22 @@ class TopOpt():
             xmax  = np.concatenate((xmax, np.pi*np.ones_like(alpha)))
         
         self.__update_state(x, apply_filters=False)
-        if self.overhang_constraint:
-            # asyinit = 0.01
-            # asyincr = 1.15
-            # asydecr = 0.6
-            asyinit = 0.2
-            asyincr = 1.2
-            asydecr = 0.7
-        else:
-            asyinit = 0.2
-            asyincr = 1.2
-            asydecr = 0.7
+        asyinit = 0.2
+        asyincr = 1.2
+        asydecr = 0.7
         self.mma = MMA(self.fea,self.sensitivities,self.constraint,self.dconstraint,xmin,xmax,self.move,asyinit,asyincr,asydecr)
         
-        self.rho_hist      = []
-        self.theta_hist    = []
-        self.alpha_hist    = []
-        self.comp_max_hist = []
-        self.penal_hist    = []
-        self.beta_hist     = []
+        self.rho_hist           = []
+        self.theta_hist         = []
+        self.alpha_hist         = []
+        self.comp_max_hist      = []
+        self.comp_norm_max_hist = []
+        self.penal_hist         = []
 
-        self.comp_hist     = [[] for _ in range(self.num_load_cases)]
-        self.energy_hist   = [[] for _ in range(self.num_load_cases)]
-        self.disp_hist     = [[] for _ in range(self.num_load_cases)]
+        self.comp_hist      = [[] for _ in range(self.num_load_cases)]
+        self.comp_norm_hist = [[] for _ in range(self.num_load_cases)]
+        self.energy_hist    = [[] for _ in range(self.num_load_cases)]
+        self.disp_hist      = [[] for _ in range(self.num_load_cases)]
         
         self.time       = 0
         self.fea_time   = 0
@@ -609,37 +580,7 @@ class TopOpt():
         rho[self.solid_elem] = 1
         if apply_filters: theta, alpha = self.orientation_filter.filter(rho,theta,alpha)
 
-        if self.overhang_constraint: # design variable in x is psi instead of rho
-            psi = rho.copy()
-            phi, rho_s, mu_s = self.__print_eval(psi)
-            
-            phi = self.density_filter.filter(np.ones_like(phi), phi) # direct filtering
-            rho = 1 - np.exp(-self.beta*phi) + phi*np.exp(-self.beta)
-            rho[rho < self.rho_min] = self.rho_min
-            rho[rho > 1] = 1 # correct floating point error
-
-            drhodphi = self.beta*np.exp(-self.beta*phi) + np.exp(-self.beta) # drhodphi[i] = drho_i/dphi_i
-            drhodphi *= self.density_filter.filter(np.ones_like(phi), np.ones_like(phi))
-            dphidpsi = np.zeros((self.num_elem,self.num_elem)) # dphidpsi[i,j] = dphi_i/dpsi_j
-            drhodmu_s = self.betaT/np.cosh(self.betaT*(mu_s-self.T))**2/(np.tanh(self.betaT*self.T) + np.tanh(self.betaT*(1-self.T)))
-            for layer in self.layers:
-                dphidpsi[layer,layer] = rho_s[layer]
-                for eli in layer:
-                    if len(self.overhang_support[eli]) == 0: continue
-                    dmu_sdphi_sup = 1/len(self.overhang_support[eli])
-                    dphidpsi[eli,self.overhang_boundary[eli]] = psi[eli] * drhodmu_s[eli] * dmu_sdphi_sup * np.sum(dphidpsi[self.overhang_support[eli],:][:,self.overhang_boundary[eli]], axis=0)
-
-            drhodpsi = np.diag(drhodphi) @ dphidpsi # drhodpsi[i,j] = drho_i/dpsi_j
-
-            self.current_state['psi']      = psi
-            self.current_state['phi']      = phi
-            self.current_state['rho_s']    = rho_s
-            self.current_state['mu_s']     = mu_s
-            self.current_state['drhodpsi'] = drhodpsi
-
-        if self.overhang_constraint: x_mod = psi.copy()
-        else:                        x_mod = rho.copy()
-            
+        x_mod = rho.copy()    
         if self.dim == '2D' or self.dim == '3D_layer' or self.dim == '3D_free':
             x_mod = np.concatenate((x_mod,theta))
         if self.dim == '3D_free':
@@ -653,14 +594,21 @@ class TopOpt():
     def __get_greyness(self, rho):
         return np.count_nonzero((rho > self.void_thr) & (rho < self.filled_thr))/self.num_elem
     
-    def __print_eval(self, psi):
-        phi  = psi.copy()
+    def __print_eval(self, rho):
+        phi  = rho.copy()
         beta = self.betaT
         T    = self.T
         
+        bottom = True
         rho_s = np.ones_like(phi)
         mu_s  = np.ones_like(phi)
+        phi[self.layers[0]] = 1
         for layeri in self.layers[1:]:
+            if bottom and np.all(phi[layeri] < 0.4): # if all elements in layer are void, move bottom to the next layer (keep all printable)
+                phi[layeri] = 1
+                continue
+            bottom = False
+
             for eli in layeri:
                 neighbors = self.overhang_support[eli]
                 mu_s[eli] = np.mean(phi[neighbors]) if len(neighbors) > 0 else 0
