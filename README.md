@@ -223,6 +223,7 @@ Examples may have additional dependencies:
 - `NaturalFibers.ipynb`: Jupyter notebook comparing different materials
 - `bridge.py`: example of a complete 2D optimization. Uses MPI to launch parallel processes with different initial orientations
 - `Bracket.ipynb`: Jupyter notebook with a more complex 3D optimization
+- `full_python_example.ipynb`: Jupyter notebook with an example of running the finite element analysis inside Python
 
 ## Model files
 
@@ -289,7 +290,9 @@ post.plot(colorful=False)
 
 ### Problem definition
 
-- `TopOpt(inputfiles, dim='3D_layer', jobname=None, echo=True)`
+- `TopOpt(inputfiles=None, dim='3D_layer', jobname=None, echo=True, fea_fun=None, meshdata_fun=None)`
+  Running options: use `inputfiles` to run FEA via Ansys or use `fea_fun` and `meshdata_fun` to run FEA via Python. `TopOpt.mbb2d` is an example of implementation of the Python FEA
+
   - `inputfiles`: name of the model file (without .db). For multiple load cases, tuple with all model files
   - `dim`: optimization type
     - `'SIMP'`: SIMP method, 2D or 3D optimization
@@ -298,6 +301,8 @@ post.plot(colorful=False)
     - `'3D_free'`: 3D optimization, fiber orientations defined by rotations around $z$ and $x$ respectively
   - `jobname`: subfolder of `TopOpt.res_dir` to store results for this optim. Default: no subfolder, stores results directly on `TopOpt.res_dir`
   - `echo`: print compliance at each iteration?
+  - `fea_fun`: arguments: `x` and `penal`. Returns compliance, array with nodal displacements, and array with elemental strain energies
+  - `meshdata_fun`: returns number of elements, number of nodes, coordinates of the centers of the elements (shape `(num_elem,3)`), array with the volumes of the elements, coordinates of the nodes (shape `(num_node,3)`)
 
 All setter functions are optional, the optimization can be performed with the default parameters
 

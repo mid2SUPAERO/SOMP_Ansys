@@ -83,8 +83,8 @@ class Post2D(PostProcessor):
         anim = FuncAnimation(fig, partial(self.plot, colorful=colorful, save=False, fig=fig, ax=ax), frames=len(self.solver.rho_hist))
         anim.save(filename)
 
-class Post3D(PostProcessor):    
-    def plot(self, iteration=-1, colorful=True, printability=False, elev=None, azim=None, domain_stl=None, filename=None, save=True, fig=None, ax=None):
+class Post3D(PostProcessor):
+    def plot(self, iteration=-1, colorful=True, elev=None, azim=None, domain_stl=None, filename=None, save=True, fig=None, ax=None):
         if ax is None:
             fig = plt.figure(dpi=500)
             ax = fig.add_axes([0,0,1,1], projection='3d')
@@ -110,24 +110,8 @@ class Post3D(PostProcessor):
         v = np.cos(alpha)*np.sin(theta)
         w = np.sin(alpha)
         
-        # orientations in the global coordinate system
-        euler1, euler2 = self.solver.print_euler # rotations around z and x' respectively
-        T = np.array([[np.cos(euler1),-np.sin(euler1),0],
-                      [np.sin(euler1),np.cos(euler1),0],
-                      [0,0,1]]) @ \
-            np.array([[1,0,0],
-                      [0,np.cos(euler2),-np.sin(euler2)],
-                      [0,np.sin(euler2),np.cos(euler2)]])
-        u, v, w = np.dot(T,[u,v,w])
-        
         rho = self.solver.rho_hist[iteration]
-        if printability:
-            color = ['black' if printable else 'red' for printable in self.solver.elm_printability]
-            
-            # plot print direction
-            origin = np.where(self.solver.print_direction<0, maxdim, 0)
-            plt.quiver(*origin, *self.solver.print_direction, label='Printing direction', color='r', length=0.2*np.max(maxdim), linewidth=2)
-        elif colorful:
+        if colorful:
             color = [(np.abs(w[i]),np.abs(u[i]),np.abs(v[i])) for i in range(len(u))]
             
             # plot coordinate system
@@ -143,20 +127,11 @@ class Post3D(PostProcessor):
             if filename is None: filename = self.solver.res_root / 'design.png'
             plt.savefig(filename)
         
-    def plot_layer(self, iteration=-1, layer=0, colorful=False, printability=False, filename=None, save=True, fig=None, ax=None, zoom=None):
+    def plot_layer(self, iteration=-1, layer=0, colorful=False, filename=None, save=True, fig=None, ax=None, zoom=None):
         if fig is None: fig, ax = plt.subplots(dpi=300)
                 
         idx = self.solver.layers[layer]
-        # transofrmation to the printing coordinate system
-        euler1, euler2 = self.solver.print_euler # rotations around z and x' respectively
-        T = np.array([[1,0,0],
-                      [0,np.cos(euler2),np.sin(euler2)],
-                      [0,-np.sin(euler2),np.cos(euler2)]]) @ \
-            np.array([[np.cos(euler1),np.sin(euler1),0],
-                      [-np.sin(euler1),np.cos(euler1),0],
-                      [0,0,1]])
-        
-        plot_lim = T @ self.solver.node_coord.T
+        plot_lim = self.solver.node_coord.T
         
         ax.cla()
         ax.set_aspect('equal')
@@ -164,7 +139,7 @@ class Post3D(PostProcessor):
         plt.ylim(np.amin(plot_lim[1,:]),np.amax(plot_lim[1,:]))
         plt.title('Layer {}/{}'.format(layer+1,len(self.solver.layers)))
         
-        print_coord = T @ self.solver.centers[idx,:].T
+        print_coord = self.solver.centers[idx,:].T
         x, y = print_coord[0,:], print_coord[1,:]
         
         rho   = self.solver.rho_hist[iteration][idx]
@@ -172,9 +147,7 @@ class Post3D(PostProcessor):
         u = np.cos(theta)
         v = np.sin(theta)
         
-        if printability:
-            color = ['black' if printable else 'red' for printable in self.solver.elm_printability[idx]]
-        elif colorful:
+        if colorful:
             color = [(0,np.abs(u[i]),np.abs(v[i])) for i in range(len(u))]
         else:
             color = 'black'
@@ -243,12 +216,12 @@ class Post3D(PostProcessor):
             if filename is None: filename = self.solver.res_root / 'design_fill.png'
             plt.savefig(filename)
         
-    def animate(self, filename=None, colorful=True, printability=False, elev=None, azim=None):
+    def animate(self, filename=None, colorful=True, elev=None, azim=None):
         if filename is None: filename = self.solver.res_root / 'animation.gif'
         
         fig = plt.figure(dpi=500)
         ax = fig.add_axes([0,0,1,1], projection='3d')
-        anim = FuncAnimation(fig, partial(self.plot, colorful=colorful, printability=printability, elev=elev, azim=azim, fig=fig, ax=ax), frames=len(self.solver.rho_hist))
+        anim = FuncAnimation(fig, partial(self.plot, colorful=colorful, elev=elev, azim=azim, fig=fig, ax=ax), frames=len(self.solver.rho_hist))
         anim.save(filename)
         
     def animate_layer(self, layer=0, colorful=False, filename=None):
@@ -257,8 +230,8 @@ class Post3D(PostProcessor):
         anim = FuncAnimation(fig, partial(self.plot_layer, layer=layer, colorful=colorful, save=False, fig=fig, ax=ax), frames=len(self.solver.rho_hist))
         anim.save(filename)
         
-    def animate_print(self, colorful=False, printability=False, filename=None):
+    def animate_print(self, colorful=False, filename=None):
         if filename is None: filename = self.solver.res_root / 'animation_print.gif'
         fig, ax = plt.subplots(dpi=300)
-        anim = FuncAnimation(fig, lambda layer: self.plot_layer(iteration=-1, layer=layer, colorful=colorful, printability=printability, save=False, fig=fig, ax=ax), frames=len(self.solver.layers))
+        anim = FuncAnimation(fig, lambda layer: self.plot_layer(iteration=-1, layer=layer, colorful=colorful, save=False, fig=fig, ax=ax), frames=len(self.solver.layers))
         anim.save(filename)

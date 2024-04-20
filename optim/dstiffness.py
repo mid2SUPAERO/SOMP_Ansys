@@ -17,7 +17,7 @@ def dk2d(Ex,Ey,nuxy,nuyz,Gxy,T,V):
     dkdt *= V
     return dkdt, np.zeros((8,8))
 
-def dk3d(Ex,Ey,nuxy,nuyz,Gxy,T,A,V,print_euler):
+def dk3d(Ex,Ey,nuxy,nuyz,Gxy,T,A,V):
     points  = [-1/np.sqrt(3), 1/np.sqrt(3)]
     weights = [1, 1]
     
@@ -26,11 +26,6 @@ def dk3d(Ex,Ey,nuxy,nuyz,Gxy,T,A,V,print_euler):
     dTa = dTa_fun(A)
     Tt  = Tt_fun(T)
     dTt = dTt_fun(T)
-    
-    # C in the printing coordinate system
-    euler1, euler2 = print_euler
-    Tprint = Ta_fun(euler2) @ Tt_fun(euler1)
-    C = Tprint @ C @ Tprint.T
     
     dkdt, dkda = np.zeros((24,24)), np.zeros((24,24))
     for xi, wi in zip(points, weights):

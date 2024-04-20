@@ -15,7 +15,6 @@ res_dir    = Path('results/bridge/')
 mod_dir    = Path('models/')
 TopOpt.set_paths(ANSYS_path, res_dir, mod_dir)
 
-raise
 
 Ex   = 113.6e3 # MPa
 Ey   = 9.65e3 # MPa
