@@ -223,6 +223,7 @@ Examples may have additional dependencies:
 ## Examples
 
 - `SimpleExample.ipynb`: Jupyter notebook with an example of 2D and 3D optimizations
+- `SIMP.ipynb`, `Bracket_SIMP.ipynb`: examples of using the SIMP method for 3D optimizations
 - `global3d.py`: example of a complete 3D optimization. Launches multiple optimizations with different materials. Results in `examples/global3d.out`, visualized with `global3d_plots.py`
 - `NaturalFibers.ipynb`: Jupyter notebook comparing different materials
 - `bridge.py`: example of a complete 2D optimization. Uses MPI to launch parallel processes with different initial orientations
