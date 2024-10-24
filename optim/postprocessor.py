@@ -48,6 +48,9 @@ class Post2D(PostProcessor):
             raise ValueError('solver does not contain a 2D optimization')
         super().__init__(solver)
 
+    def plot(self, iteration=-1, colorful=False, filename=None, save=True, fig=None, ax=None, zoom=None):
+        self.plot_orientations(iteration, colorful, filename, save, fig, ax, zoom)
+
     def plot_orientations(self, iteration=-1, colorful=False, filename=None, save=True, fig=None, ax=None, zoom=None):
         if fig is None: fig, ax = plt.subplots(dpi=300)
         ax.cla()

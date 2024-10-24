@@ -206,18 +206,19 @@ $$CO_{2,tot} = CO_{2,mat} + CO_{2,use}$$
 
 ## Dependencies
 
-The code was tested with the following libraries in Python >= 3.9:
-- NumPy >= 1.21.5
-- SciPy >= 1.6.2
-- Matplotlib >= 3.5.1
-- jsonpickle >= 3.0.2
-- pyansys 2023.2.11:
-  - ansys-mapdl-core
-  - ansys-dpf-core
+All dependencies can be installed in a fresh `venv` 
+```
+pip install -r requirements.txt
+```
+
+Some dependencies are automatically installed with pyansys, namely:
+- NumPy
+- SciPy
+- Matplotlib
+- jsonpickle
 
 Examples may have additional dependencies:
 - mpi4py 3.0.1
-- niceplots 2.4.0
 - pyvista 0.38.6
 
 ## Examples

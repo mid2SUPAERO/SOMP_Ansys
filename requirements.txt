@@ -1,0 +1,4 @@
+ansys-mapdl-core==0.68.6
+ansys-dpf-core==0.13.0
+niceplots==2.5.1
+numpy-stl==3.1.2
