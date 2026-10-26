@@ -13,6 +13,7 @@ To cite SOMP_Ansys: Asai, G., Jansari, C., Lachaud, F., Masania, K., & Morlier, 
   pages={108615},
   year={2025},
   publisher={Elsevier}}
+```
 
 This code implements a finite element-based topology optimization algorithm for 3D printed structures. It is written in Python and uses Ansys as finite element solver through the Python interface PyAnsys/PyMAPDL.
 
