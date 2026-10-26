@@ -1,5 +1,19 @@
 # SOMP_Ansys
 
+Design for composite material additive manufacturing is governed by multiple process variables that can be computationally expensive to optimize. This is especially true when considering discrete variables, such as the material type to be used, which lead to a lot of possible solutions that have to be evaluated. Here, we propose a workflow for optimizing topology and fiber placement of 3D volumetric structures based on mechanical performance under multiple load cases and environmental impact. An eco-informed material selection from a set fibers and polymers is followed by a methodology to optimize the manufacturing setting. By performing these two steps sequentially, the number of input parameter sets to be tested is reduced in a combinatorial scale, along with the computational cost. The framework can be easily extended by adapting the analyses and holds significant promise for the design of additive manufactured sustainable structures.
+
+To cite SOMP_Ansys: Asai, G., Jansari, C., Lachaud, F., Masania, K., & Morlier, J. (2025). Ecodesign of 3D volumetric fiber-composite structures with topology optimization. Composites Part A: Applied Science and Manufacturing, 190, 108615.
+
+```latex
+@article{asai2025ecodesign,
+  title={Ecodesign of 3D volumetric fiber-composite structures with topology optimization},
+  author={Asai, Gustavo and Jansari, Chintan and Lachaud, Fr{\'e}d{\'e}ric and Masania, Kunal and Morlier, Joseph},
+  journal={Composites Part A: Applied Science and Manufacturing},
+  volume={190},
+  pages={108615},
+  year={2025},
+  publisher={Elsevier}}
+
 This code implements a finite element-based topology optimization algorithm for 3D printed structures. It is written in Python and uses Ansys as finite element solver through the Python interface PyAnsys/PyMAPDL.
 
 ### Problem formulation
